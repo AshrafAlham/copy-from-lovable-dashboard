@@ -1110,7 +1110,7 @@ function HeatmapCompare({
                     />
                   );
                 })}
-              </>
+              </React.Fragment>
             );
           })}
         </div>
