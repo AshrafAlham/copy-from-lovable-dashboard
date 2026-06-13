@@ -1,7 +1,8 @@
 import Papa from "papaparse";
 
-export type Row = Record<string, string | number | null> & {
+export type Row = {
   __timestamp: Date | null;
+  [key: string]: string | number | Date | null;
 };
 
 export interface SheetData {
