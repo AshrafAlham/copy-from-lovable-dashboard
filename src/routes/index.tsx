@@ -1084,7 +1084,7 @@ function HeatmapCompare({
             const { min, max } = stats[rIdx];
             const range = max - min || 1;
             return (
-              <React.Fragment key={s.key}>
+              <Fragment key={s.key}>
                 <div
                   key={`label-${s.key}`}
                   className="text-[10px] font-mono px-2 py-1 truncate sticky left-0 bg-card border-r border-border"
@@ -1110,7 +1110,7 @@ function HeatmapCompare({
                     />
                   );
                 })}
-              </React.Fragment>
+              </Fragment>
             );
           })}
         </div>
