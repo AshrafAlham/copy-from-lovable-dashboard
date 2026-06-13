@@ -3,9 +3,9 @@
 export const TRAIN_SHEETS: Record<string, string> = {
   "Train A":
     "https://docs.google.com/spreadsheets/d/e/2PACX-1vRtWCxqejnal-jlTYPG4-7ouZ2fMzAa2oADMIZGguvHwzfemj1eyfIclDpc-CY6w9luAaNvezzpeoc7/pub?output=csv",
-  "Train B": "",
-  "Train C": "",
-  "Train D": "",
+  "Train B": "https://docs.google.com/spreadsheets/d/e/2PACX-1vR2o8F8wrVQHjVSY1AqWZWDMpooS82KkxQNkkcI6a4R_VgzLWt8hC8vE-OSCfwm3slufGjlIh-ENLB1/pub?output=csv",
+  "Train C": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTPxqWaOC6P-OxdIb7UE3_9jXTKzlJQlvyLZbbqfMO_MmdCfyQ7AhUGR8XCVDYPaKDzoJ-LwCozXAbO/pub?output=csv",
+  "Train D": "https://docs.google.com/spreadsheets/d/e/2PACX-1vS-FWIH-J19DvqkbnBuiDRRsbQHjkXzF_JdCWw9RG5EkCUqC0E9mZYo8AhHAgDaYAPJuTf5oBgRq_ih/pub?output=csv",
 };
 
 // Columns that are metadata (not numeric sensor readings).
