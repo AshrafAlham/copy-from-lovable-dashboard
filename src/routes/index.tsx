@@ -609,3 +609,237 @@ function RawTable({
     </ScrollArea>
   );
 }
+
+// ===================== Compare Trains =====================
+
+interface CompareQuery {
+  train: string;
+  data?: { columns: string[]; rows: Row[] };
+  isLoading: boolean;
+  error: Error | null;
+}
+
+function CompareView({
+  trainNames,
+  queries,
+}: {
+  trainNames: string[];
+  queries: CompareQuery[];
+}) {
+  const loaded = queries.filter((q) => q.data);
+  const anyLoading = queries.some((q) => q.isLoading);
+  const errors = queries.filter((q) => q.error);
+
+  // Union of sensor columns across all loaded trains
+  const allColumns = useMemo(() => {
+    const set = new Set<string>();
+    for (const q of loaded) for (const c of q.data!.columns) set.add(c);
+    return Array.from(set);
+  }, [loaded]);
+
+  const groups = useMemo(() => groupColumns(allColumns), [allColumns]);
+  const groupNames = Object.keys(groups);
+  const [activeGroup, setActiveGroup] = useState<string>(groupNames[0] ?? "");
+  const [sensor, setSensor] = useState<string>("");
+  const [selectedTrains, setSelectedTrains] = useState<string[]>(trainNames);
+
+  // Pick a default sensor when the active group changes
+  const sensorsInGroup = groups[activeGroup] ?? [];
+  const effectiveSensor =
+    sensor && sensorsInGroup.includes(sensor) ? sensor : sensorsInGroup[0] ?? "";
+
+  // Build merged chart data keyed by timestamp string
+  const chartData = useMemo(() => {
+    if (!effectiveSensor) return [];
+    const map = new Map<string, Record<string, string | number | null>>();
+    for (const q of loaded) {
+      if (!selectedTrains.includes(q.train)) continue;
+      for (const row of q.data!.rows) {
+        if (!row.__timestamp) continue;
+        const key = format(row.__timestamp, "MM/dd HH:mm");
+        let entry = map.get(key);
+        if (!entry) {
+          entry = { t: key };
+          map.set(key, entry);
+        }
+        const v = row[effectiveSensor];
+        entry[q.train] = typeof v === "number" ? v : null;
+      }
+    }
+    return Array.from(map.values()).sort((a, b) =>
+      String(a.t).localeCompare(String(b.t))
+    );
+  }, [loaded, effectiveSensor, selectedTrains]);
+
+  const toggleTrain = (t: string) =>
+    setSelectedTrains((prev) =>
+      prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]
+    );
+
+  if (anyLoading && loaded.length === 0) return <Loading />;
+
+  return (
+    <div className="space-y-4">
+      {errors.length > 0 && (
+        <Card className="border-destructive/40">
+          <CardContent className="py-3 text-sm text-destructive font-mono">
+            Failed to load: {errors.map((e) => e.train).join(", ")}
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardContent className="py-4 flex flex-wrap gap-3 items-center">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground uppercase tracking-wider">
+              Trains:
+            </span>
+            {trainNames.map((t) => {
+              const active = selectedTrains.includes(t);
+              const q = queries.find((x) => x.train === t);
+              const disabled = !q?.data;
+              return (
+                <button
+                  key={t}
+                  disabled={disabled}
+                  onClick={() => toggleTrain(t)}
+                  className={`text-xs px-2.5 py-1 rounded-md font-mono transition-colors ${
+                    disabled
+                      ? "opacity-40 cursor-not-allowed border border-border"
+                      : active
+                      ? "bg-primary/15 ring-1 ring-primary/30 text-foreground"
+                      : "border border-border text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  {t}
+                </button>
+              );
+            })}
+          </div>
+          <div className="ml-auto flex items-center gap-2 flex-wrap">
+            <Select value={activeGroup} onValueChange={setActiveGroup}>
+              <SelectTrigger className="w-[220px] h-8 text-xs">
+                <SelectValue placeholder="Section" />
+              </SelectTrigger>
+              <SelectContent>
+                {groupNames.map((g) => (
+                  <SelectItem key={g} value={g}>
+                    {g}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={effectiveSensor} onValueChange={setSensor}>
+              <SelectTrigger className="w-[280px] h-8 text-xs">
+                <SelectValue placeholder="Sensor" />
+              </SelectTrigger>
+              <SelectContent>
+                {sensorsInGroup.map((s) => (
+                  <SelectItem key={s} value={s} className="text-xs">
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium text-muted-foreground">
+            {effectiveSensor || "Select a sensor"} — across trains
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[460px]">
+            {!effectiveSensor || chartData.length === 0 ? (
+              <div className="h-full grid place-items-center text-sm text-muted-foreground">
+                No data to plot
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart
+                  data={chartData}
+                  margin={{ top: 5, right: 10, left: -10, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                  <XAxis
+                    dataKey="t"
+                    stroke="var(--color-muted-foreground)"
+                    fontSize={11}
+                    tickMargin={6}
+                  />
+                  <YAxis
+                    stroke="var(--color-muted-foreground)"
+                    fontSize={11}
+                    tickMargin={4}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: "var(--color-popover)",
+                      border: "1px solid var(--color-border)",
+                      borderRadius: 8,
+                      fontSize: 12,
+                    }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  {selectedTrains
+                    .filter((t) => queries.find((q) => q.train === t)?.data)
+                    .map((t, i) => (
+                      <Line
+                        key={t}
+                        type="monotone"
+                        dataKey={t}
+                        stroke={CHART_COLORS[i % CHART_COLORS.length]}
+                        strokeWidth={1.8}
+                        dot={false}
+                        connectNulls
+                        name={t}
+                      />
+                    ))}
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Latest value comparison */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium text-muted-foreground">
+            Latest reading per train
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {trainNames.map((t) => {
+              const q = queries.find((x) => x.train === t);
+              const last = q?.data?.rows[q.data.rows.length - 1];
+              const v = effectiveSensor && last ? last[effectiveSensor] : null;
+              return (
+                <Card key={t} className="bg-muted/30">
+                  <CardContent className="py-3 px-4">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider">
+                      {t}
+                    </p>
+                    <p className="text-xl font-mono font-semibold mt-1">
+                      {typeof v === "number" ? v.toFixed(2) : "—"}
+                    </p>
+                    <p className="text-[10px] font-mono text-muted-foreground mt-0.5">
+                      {last?.__timestamp
+                        ? format(last.__timestamp, "MM/dd HH:mm")
+                        : "no data"}
+                    </p>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
