@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueries } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import {
   ResponsiveContainer,
@@ -63,18 +63,45 @@ const CHART_COLORS = [
   "var(--color-chart-8)",
 ];
 
+// ms until the next 11:00 AM local time
+function msUntilNext11AM() {
+  const now = new Date();
+  const next = new Date(now);
+  next.setHours(11, 0, 0, 0);
+  if (next.getTime() <= now.getTime()) next.setDate(next.getDate() + 1);
+  return next.getTime() - now.getTime();
+}
+
+const ONE_DAY = 24 * 60 * 60 * 1000;
+
 function Dashboard() {
   const trainNames = Object.keys(TRAIN_SHEETS);
+  const [mode, setMode] = useState<"single" | "compare">("single");
   const [train, setTrain] = useState(trainNames[0]);
   const url = TRAIN_SHEETS[train];
 
   const query = useQuery({
     queryKey: ["sheet", train, url],
     queryFn: () => fetchSheet(url),
-    enabled: !!url,
-    refetchInterval: 5 * 60 * 1000, // 5 minutes
-    staleTime: 60 * 1000,
+    enabled: !!url && mode === "single",
+    refetchInterval: () => msUntilNext11AM(),
+    staleTime: ONE_DAY,
+    refetchOnWindowFocus: false,
   });
+
+  // For compare mode: fetch all trains in parallel
+  const compareQueries = useQueries({
+    queries: trainNames.map((t) => ({
+      queryKey: ["sheet", t, TRAIN_SHEETS[t]],
+      queryFn: () => fetchSheet(TRAIN_SHEETS[t]),
+      enabled: !!TRAIN_SHEETS[t] && mode === "compare",
+      refetchInterval: () => msUntilNext11AM(),
+      staleTime: ONE_DAY,
+      refetchOnWindowFocus: false,
+    })),
+  });
+
+
 
   return (
     <div className="min-h-screen">
@@ -89,31 +116,50 @@ function Dashboard() {
                 Rotating Equipment — Control Room
               </h1>
               <p className="text-xs text-muted-foreground font-mono">
-                Live readings · refreshes every 5 min
+                Auto-refresh daily at 11:00 AM
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Select value={train} onValueChange={setTrain}>
-              <SelectTrigger className="w-[160px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {trainNames.map((t) => (
-                  <SelectItem key={t} value={t} disabled={!TRAIN_SHEETS[t]}>
-                    {t} {!TRAIN_SHEETS[t] && "(no URL)"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Tabs value={mode} onValueChange={(v) => setMode(v as "single" | "compare")}>
+              <TabsList className="h-9">
+                <TabsTrigger value="single" className="text-xs">Single Train</TabsTrigger>
+                <TabsTrigger value="compare" className="text-xs">Compare Trains</TabsTrigger>
+              </TabsList>
+            </Tabs>
+            {mode === "single" && (
+              <Select value={train} onValueChange={setTrain}>
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {trainNames.map((t) => (
+                    <SelectItem key={t} value={t} disabled={!TRAIN_SHEETS[t]}>
+                      {t} {!TRAIN_SHEETS[t] && "(no URL)"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             <Button
               variant="outline"
               size="icon"
-              onClick={() => query.refetch()}
-              disabled={query.isFetching}
+              onClick={() => {
+                if (mode === "single") query.refetch();
+                else compareQueries.forEach((q) => q.refetch());
+              }}
+              disabled={
+                mode === "single"
+                  ? query.isFetching
+                  : compareQueries.some((q) => q.isFetching)
+              }
             >
               <RefreshCw
-                className={`size-4 ${query.isFetching ? "animate-spin" : ""}`}
+                className={`size-4 ${
+                  (mode === "single" ? query.isFetching : compareQueries.some((q) => q.isFetching))
+                    ? "animate-spin"
+                    : ""
+                }`}
               />
             </Button>
           </div>
@@ -121,12 +167,28 @@ function Dashboard() {
       </header>
 
       <main className="container mx-auto px-6 py-6 space-y-6">
-        {!url && <NoUrl train={train} />}
-        {url && query.isLoading && <Loading />}
-        {url && query.error && <ErrorView error={query.error as Error} />}
-        {url && query.data && (
-          <DashboardBody data={query.data.rows} columns={query.data.columns} />
+        {mode === "single" && (
+          <>
+            {!url && <NoUrl train={train} />}
+            {url && query.isLoading && <Loading />}
+            {url && query.error && <ErrorView error={query.error as Error} />}
+            {url && query.data && (
+              <DashboardBody data={query.data.rows} columns={query.data.columns} />
+            )}
+          </>
         )}
+        {mode === "compare" && (
+          <CompareView
+            trainNames={trainNames}
+            queries={compareQueries.map((q, i) => ({
+              train: trainNames[i],
+              data: q.data,
+              isLoading: q.isLoading,
+              error: q.error as Error | null,
+            }))}
+          />
+        )}
+
       </main>
     </div>
   );
@@ -547,3 +609,237 @@ function RawTable({
     </ScrollArea>
   );
 }
+
+// ===================== Compare Trains =====================
+
+interface CompareQuery {
+  train: string;
+  data?: { columns: string[]; rows: Row[] };
+  isLoading: boolean;
+  error: Error | null;
+}
+
+function CompareView({
+  trainNames,
+  queries,
+}: {
+  trainNames: string[];
+  queries: CompareQuery[];
+}) {
+  const loaded = queries.filter((q) => q.data);
+  const anyLoading = queries.some((q) => q.isLoading);
+  const errors = queries.filter((q) => q.error);
+
+  // Union of sensor columns across all loaded trains
+  const allColumns = useMemo(() => {
+    const set = new Set<string>();
+    for (const q of loaded) for (const c of q.data!.columns) set.add(c);
+    return Array.from(set);
+  }, [loaded]);
+
+  const groups = useMemo(() => groupColumns(allColumns), [allColumns]);
+  const groupNames = Object.keys(groups);
+  const [activeGroup, setActiveGroup] = useState<string>(groupNames[0] ?? "");
+  const [sensor, setSensor] = useState<string>("");
+  const [selectedTrains, setSelectedTrains] = useState<string[]>(trainNames);
+
+  // Pick a default sensor when the active group changes
+  const sensorsInGroup = groups[activeGroup] ?? [];
+  const effectiveSensor =
+    sensor && sensorsInGroup.includes(sensor) ? sensor : sensorsInGroup[0] ?? "";
+
+  // Build merged chart data keyed by timestamp string
+  const chartData = useMemo(() => {
+    if (!effectiveSensor) return [];
+    const map = new Map<string, Record<string, string | number | null>>();
+    for (const q of loaded) {
+      if (!selectedTrains.includes(q.train)) continue;
+      for (const row of q.data!.rows) {
+        if (!row.__timestamp) continue;
+        const key = format(row.__timestamp, "MM/dd HH:mm");
+        let entry = map.get(key);
+        if (!entry) {
+          entry = { t: key };
+          map.set(key, entry);
+        }
+        const v = row[effectiveSensor];
+        entry[q.train] = typeof v === "number" ? v : null;
+      }
+    }
+    return Array.from(map.values()).sort((a, b) =>
+      String(a.t).localeCompare(String(b.t))
+    );
+  }, [loaded, effectiveSensor, selectedTrains]);
+
+  const toggleTrain = (t: string) =>
+    setSelectedTrains((prev) =>
+      prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]
+    );
+
+  if (anyLoading && loaded.length === 0) return <Loading />;
+
+  return (
+    <div className="space-y-4">
+      {errors.length > 0 && (
+        <Card className="border-destructive/40">
+          <CardContent className="py-3 text-sm text-destructive font-mono">
+            Failed to load: {errors.map((e) => e.train).join(", ")}
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardContent className="py-4 flex flex-wrap gap-3 items-center">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground uppercase tracking-wider">
+              Trains:
+            </span>
+            {trainNames.map((t) => {
+              const active = selectedTrains.includes(t);
+              const q = queries.find((x) => x.train === t);
+              const disabled = !q?.data;
+              return (
+                <button
+                  key={t}
+                  disabled={disabled}
+                  onClick={() => toggleTrain(t)}
+                  className={`text-xs px-2.5 py-1 rounded-md font-mono transition-colors ${
+                    disabled
+                      ? "opacity-40 cursor-not-allowed border border-border"
+                      : active
+                      ? "bg-primary/15 ring-1 ring-primary/30 text-foreground"
+                      : "border border-border text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  {t}
+                </button>
+              );
+            })}
+          </div>
+          <div className="ml-auto flex items-center gap-2 flex-wrap">
+            <Select value={activeGroup} onValueChange={setActiveGroup}>
+              <SelectTrigger className="w-[220px] h-8 text-xs">
+                <SelectValue placeholder="Section" />
+              </SelectTrigger>
+              <SelectContent>
+                {groupNames.map((g) => (
+                  <SelectItem key={g} value={g}>
+                    {g}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={effectiveSensor} onValueChange={setSensor}>
+              <SelectTrigger className="w-[280px] h-8 text-xs">
+                <SelectValue placeholder="Sensor" />
+              </SelectTrigger>
+              <SelectContent>
+                {sensorsInGroup.map((s) => (
+                  <SelectItem key={s} value={s} className="text-xs">
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium text-muted-foreground">
+            {effectiveSensor || "Select a sensor"} — across trains
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[460px]">
+            {!effectiveSensor || chartData.length === 0 ? (
+              <div className="h-full grid place-items-center text-sm text-muted-foreground">
+                No data to plot
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart
+                  data={chartData}
+                  margin={{ top: 5, right: 10, left: -10, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                  <XAxis
+                    dataKey="t"
+                    stroke="var(--color-muted-foreground)"
+                    fontSize={11}
+                    tickMargin={6}
+                  />
+                  <YAxis
+                    stroke="var(--color-muted-foreground)"
+                    fontSize={11}
+                    tickMargin={4}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: "var(--color-popover)",
+                      border: "1px solid var(--color-border)",
+                      borderRadius: 8,
+                      fontSize: 12,
+                    }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  {selectedTrains
+                    .filter((t) => queries.find((q) => q.train === t)?.data)
+                    .map((t, i) => (
+                      <Line
+                        key={t}
+                        type="monotone"
+                        dataKey={t}
+                        stroke={CHART_COLORS[i % CHART_COLORS.length]}
+                        strokeWidth={1.8}
+                        dot={false}
+                        connectNulls
+                        name={t}
+                      />
+                    ))}
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Latest value comparison */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium text-muted-foreground">
+            Latest reading per train
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {trainNames.map((t) => {
+              const q = queries.find((x) => x.train === t);
+              const last = q?.data?.rows[q.data.rows.length - 1];
+              const v = effectiveSensor && last ? last[effectiveSensor] : null;
+              return (
+                <Card key={t} className="bg-muted/30">
+                  <CardContent className="py-3 px-4">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider">
+                      {t}
+                    </p>
+                    <p className="text-xl font-mono font-semibold mt-1">
+                      {typeof v === "number" ? v.toFixed(2) : "—"}
+                    </p>
+                    <p className="text-[10px] font-mono text-muted-foreground mt-0.5">
+                      {last?.__timestamp
+                        ? format(last.__timestamp, "MM/dd HH:mm")
+                        : "no data"}
+                    </p>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
