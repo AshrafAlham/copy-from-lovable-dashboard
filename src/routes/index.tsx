@@ -116,31 +116,50 @@ function Dashboard() {
                 Rotating Equipment — Control Room
               </h1>
               <p className="text-xs text-muted-foreground font-mono">
-                Live readings · refreshes every 5 min
+                Auto-refresh daily at 11:00 AM
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Select value={train} onValueChange={setTrain}>
-              <SelectTrigger className="w-[160px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {trainNames.map((t) => (
-                  <SelectItem key={t} value={t} disabled={!TRAIN_SHEETS[t]}>
-                    {t} {!TRAIN_SHEETS[t] && "(no URL)"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Tabs value={mode} onValueChange={(v) => setMode(v as "single" | "compare")}>
+              <TabsList className="h-9">
+                <TabsTrigger value="single" className="text-xs">Single Train</TabsTrigger>
+                <TabsTrigger value="compare" className="text-xs">Compare Trains</TabsTrigger>
+              </TabsList>
+            </Tabs>
+            {mode === "single" && (
+              <Select value={train} onValueChange={setTrain}>
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {trainNames.map((t) => (
+                    <SelectItem key={t} value={t} disabled={!TRAIN_SHEETS[t]}>
+                      {t} {!TRAIN_SHEETS[t] && "(no URL)"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             <Button
               variant="outline"
               size="icon"
-              onClick={() => query.refetch()}
-              disabled={query.isFetching}
+              onClick={() => {
+                if (mode === "single") query.refetch();
+                else compareQueries.forEach((q) => q.refetch());
+              }}
+              disabled={
+                mode === "single"
+                  ? query.isFetching
+                  : compareQueries.some((q) => q.isFetching)
+              }
             >
               <RefreshCw
-                className={`size-4 ${query.isFetching ? "animate-spin" : ""}`}
+                className={`size-4 ${
+                  (mode === "single" ? query.isFetching : compareQueries.some((q) => q.isFetching))
+                    ? "animate-spin"
+                    : ""
+                }`}
               />
             </Button>
           </div>
@@ -148,12 +167,28 @@ function Dashboard() {
       </header>
 
       <main className="container mx-auto px-6 py-6 space-y-6">
-        {!url && <NoUrl train={train} />}
-        {url && query.isLoading && <Loading />}
-        {url && query.error && <ErrorView error={query.error as Error} />}
-        {url && query.data && (
-          <DashboardBody data={query.data.rows} columns={query.data.columns} />
+        {mode === "single" && (
+          <>
+            {!url && <NoUrl train={train} />}
+            {url && query.isLoading && <Loading />}
+            {url && query.error && <ErrorView error={query.error as Error} />}
+            {url && query.data && (
+              <DashboardBody data={query.data.rows} columns={query.data.columns} />
+            )}
+          </>
         )}
+        {mode === "compare" && (
+          <CompareView
+            trainNames={trainNames}
+            queries={compareQueries.map((q, i) => ({
+              train: trainNames[i],
+              data: q.data,
+              isLoading: q.isLoading,
+              error: q.error as Error | null,
+            }))}
+          />
+        )}
+
       </main>
     </div>
   );
