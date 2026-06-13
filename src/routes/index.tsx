@@ -63,18 +63,45 @@ const CHART_COLORS = [
   "var(--color-chart-8)",
 ];
 
+// ms until the next 11:00 AM local time
+function msUntilNext11AM() {
+  const now = new Date();
+  const next = new Date(now);
+  next.setHours(11, 0, 0, 0);
+  if (next.getTime() <= now.getTime()) next.setDate(next.getDate() + 1);
+  return next.getTime() - now.getTime();
+}
+
+const ONE_DAY = 24 * 60 * 60 * 1000;
+
 function Dashboard() {
   const trainNames = Object.keys(TRAIN_SHEETS);
+  const [mode, setMode] = useState<"single" | "compare">("single");
   const [train, setTrain] = useState(trainNames[0]);
   const url = TRAIN_SHEETS[train];
 
   const query = useQuery({
     queryKey: ["sheet", train, url],
     queryFn: () => fetchSheet(url),
-    enabled: !!url,
-    refetchInterval: 5 * 60 * 1000, // 5 minutes
-    staleTime: 60 * 1000,
+    enabled: !!url && mode === "single",
+    refetchInterval: () => msUntilNext11AM(),
+    staleTime: ONE_DAY,
+    refetchOnWindowFocus: false,
   });
+
+  // For compare mode: fetch all trains in parallel
+  const compareQueries = useQueries({
+    queries: trainNames.map((t) => ({
+      queryKey: ["sheet", t, TRAIN_SHEETS[t]],
+      queryFn: () => fetchSheet(TRAIN_SHEETS[t]),
+      enabled: !!TRAIN_SHEETS[t] && mode === "compare",
+      refetchInterval: () => msUntilNext11AM(),
+      staleTime: ONE_DAY,
+      refetchOnWindowFocus: false,
+    })),
+  });
+
+
 
   return (
     <div className="min-h-screen">
