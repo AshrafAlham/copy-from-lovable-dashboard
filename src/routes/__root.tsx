@@ -77,12 +77,16 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Rotating Equipment Dashboard" },
+      { title: "Dahshour Dashboard (Ashraf Alham)" },
       { name: "description", content: "Live monitoring dashboard for rotating equipment trains — bearings, vibration, lube oil, gearbox, exhaust." },
-      { property: "og:title", content: "Rotating Equipment Dashboard" },
+      { property: "og:title", content: "Dahshour Dashboard (Ashraf Alham)" },
       { property: "og:description", content: "Live monitoring dashboard for rotating equipment trains — bearings, vibration, lube oil, gearbox, exhaust." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
+      { name: "twitter:title", content: "Dahshour Dashboard (Ashraf Alham)" },
+      { name: "twitter:description", content: "Live monitoring dashboard for rotating equipment trains — bearings, vibration, lube oil, gearbox, exhaust." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/c3516e2a-cc23-4dce-ab8f-009a71f4f01d/id-preview-ef100580--64ab25a8-7afb-4241-8014-733e454be2ff.lovable.app-1781369624296.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/c3516e2a-cc23-4dce-ab8f-009a71f4f01d/id-preview-ef100580--64ab25a8-7afb-4241-8014-733e454be2ff.lovable.app-1781369624296.png" },
     ],
     links: [
       {
