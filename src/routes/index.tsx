@@ -1,10 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueries } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import {
   ResponsiveContainer,
   LineChart,
   Line,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -619,6 +624,8 @@ interface CompareQuery {
   error: Error | null;
 }
 
+type ChartKind = "line" | "bar" | "heatmap" | "pie";
+
 function CompareView({
   trainNames,
   queries,
@@ -640,20 +647,46 @@ function CompareView({
   const groups = useMemo(() => groupColumns(allColumns), [allColumns]);
   const groupNames = Object.keys(groups);
   const [activeGroup, setActiveGroup] = useState<string>(groupNames[0] ?? "");
-  const [sensor, setSensor] = useState<string>("");
+  const [selectedSensors, setSelectedSensors] = useState<string[]>([]);
   const [selectedTrains, setSelectedTrains] = useState<string[]>(trainNames);
+  const [chartKind, setChartKind] = useState<ChartKind>("line");
 
-  // Pick a default sensor when the active group changes
   const sensorsInGroup = groups[activeGroup] ?? [];
-  const effectiveSensor =
-    sensor && sensorsInGroup.includes(sensor) ? sensor : sensorsInGroup[0] ?? "";
 
-  // Build merged chart data keyed by timestamp string
+  // Auto-pick first sensor when group changes and nothing valid is selected
+  const effectiveSensors = useMemo(() => {
+    const valid = selectedSensors.filter((s) => sensorsInGroup.includes(s));
+    if (valid.length) return valid;
+    return sensorsInGroup.slice(0, 1);
+  }, [selectedSensors, sensorsInGroup]);
+
+  const activeTrains = useMemo(
+    () => selectedTrains.filter((t) => queries.find((q) => q.train === t)?.data),
+    [selectedTrains, queries]
+  );
+
+  // Series = one line/bar per (train × sensor) combination
+  const series = useMemo(() => {
+    const out: { key: string; train: string; sensor: string; label: string }[] = [];
+    for (const t of activeTrains) {
+      for (const s of effectiveSensors) {
+        out.push({
+          key: `${t} · ${s}`,
+          train: t,
+          sensor: s,
+          label: effectiveSensors.length > 1 ? `${t} · ${shortName(s)}` : t,
+        });
+      }
+    }
+    return out;
+  }, [activeTrains, effectiveSensors]);
+
+  // Time-series merged data
   const chartData = useMemo(() => {
-    if (!effectiveSensor) return [];
+    if (series.length === 0) return [];
     const map = new Map<string, Record<string, string | number | null>>();
     for (const q of loaded) {
-      if (!selectedTrains.includes(q.train)) continue;
+      if (!activeTrains.includes(q.train)) continue;
       for (const row of q.data!.rows) {
         if (!row.__timestamp) continue;
         const key = format(row.__timestamp, "MM/dd HH:mm");
@@ -662,18 +695,42 @@ function CompareView({
           entry = { t: key };
           map.set(key, entry);
         }
-        const v = row[effectiveSensor];
-        entry[q.train] = typeof v === "number" ? v : null;
+        for (const s of effectiveSensors) {
+          const v = row[s];
+          entry[`${q.train} · ${s}`] = typeof v === "number" ? v : null;
+        }
       }
     }
     return Array.from(map.values()).sort((a, b) =>
       String(a.t).localeCompare(String(b.t))
     );
-  }, [loaded, effectiveSensor, selectedTrains]);
+  }, [loaded, series, effectiveSensors, activeTrains]);
+
+  // Latest reading per series (used by bar/pie)
+  const latestPerSeries = useMemo(() => {
+    return series.map((s) => {
+      const q = queries.find((x) => x.train === s.train);
+      const rows = q?.data?.rows ?? [];
+      let val: number | null = null;
+      for (let i = rows.length - 1; i >= 0; i--) {
+        const v = rows[i][s.sensor];
+        if (typeof v === "number") {
+          val = v;
+          break;
+        }
+      }
+      return { ...s, value: val };
+    });
+  }, [series, queries]);
 
   const toggleTrain = (t: string) =>
     setSelectedTrains((prev) =>
       prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]
+    );
+
+  const toggleSensor = (s: string) =>
+    setSelectedSensors((prev) =>
+      prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
     );
 
   if (anyLoading && loaded.length === 0) return <Loading />;
@@ -688,11 +745,12 @@ function CompareView({
         </Card>
       )}
 
+      {/* Controls */}
       <Card>
-        <CardContent className="py-4 flex flex-wrap gap-3 items-center">
+        <CardContent className="py-4 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-muted-foreground uppercase tracking-wider">
-              Trains:
+            <span className="text-xs text-muted-foreground uppercase tracking-wider w-16">
+              Trains
             </span>
             {trainNames.map((t) => {
               const active = selectedTrains.includes(t);
@@ -716,130 +774,349 @@ function CompareView({
               );
             })}
           </div>
-          <div className="ml-auto flex items-center gap-2 flex-wrap">
-            <Select value={activeGroup} onValueChange={setActiveGroup}>
-              <SelectTrigger className="w-[220px] h-8 text-xs">
-                <SelectValue placeholder="Section" />
-              </SelectTrigger>
-              <SelectContent>
-                {groupNames.map((g) => (
-                  <SelectItem key={g} value={g}>
-                    {g}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={effectiveSensor} onValueChange={setSensor}>
-              <SelectTrigger className="w-[280px] h-8 text-xs">
-                <SelectValue placeholder="Sensor" />
-              </SelectTrigger>
-              <SelectContent>
-                {sensorsInGroup.map((s) => (
-                  <SelectItem key={s} value={s} className="text-xs">
-                    {s}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground uppercase tracking-wider w-16">
+              Chart
+            </span>
+            {(["line", "bar", "heatmap", "pie"] as ChartKind[]).map((k) => (
+              <button
+                key={k}
+                onClick={() => setChartKind(k)}
+                className={`text-xs px-2.5 py-1 rounded-md font-mono capitalize transition-colors ${
+                  chartKind === k
+                    ? "bg-primary/15 ring-1 ring-primary/30 text-foreground"
+                    : "border border-border text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                {k}
+              </button>
+            ))}
+            <div className="ml-auto flex items-center gap-2">
+              <Select value={activeGroup} onValueChange={setActiveGroup}>
+                <SelectTrigger className="w-[220px] h-8 text-xs">
+                  <SelectValue placeholder="Section" />
+                </SelectTrigger>
+                <SelectContent>
+                  {groupNames.map((g) => (
+                    <SelectItem key={g} value={g}>
+                      {g}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium text-muted-foreground">
-            {effectiveSensor || "Select a sensor"} — across trains
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[460px]">
-            {!effectiveSensor || chartData.length === 0 ? (
-              <div className="h-full grid place-items-center text-sm text-muted-foreground">
-                No data to plot
+      <div className="grid lg:grid-cols-[1fr_280px] gap-4">
+        {/* Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              {effectiveSensors.length === 1
+                ? `${effectiveSensors[0]} — across trains`
+                : `${effectiveSensors.length} sensors × ${activeTrains.length} trains`}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[460px]">
+              {series.length === 0 ? (
+                <div className="h-full grid place-items-center text-sm text-muted-foreground">
+                  Select at least one sensor and one train
+                </div>
+              ) : chartKind === "line" ? (
+                <LineCompare data={chartData} series={series} />
+              ) : chartKind === "bar" ? (
+                <BarCompare data={chartData} series={series} />
+              ) : chartKind === "pie" ? (
+                <PieCompare latest={latestPerSeries} />
+              ) : (
+                <HeatmapCompare data={chartData} series={series} />
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Sensor multi-select */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Sensors ({effectiveSensors.length}/{sensorsInGroup.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-2">
+            <ScrollArea className="h-[460px] pr-2">
+              <div className="space-y-1">
+                {sensorsInGroup.map((s) => {
+                  const active = effectiveSensors.includes(s);
+                  return (
+                    <button
+                      key={s}
+                      onClick={() => toggleSensor(s)}
+                      className={`w-full text-left text-xs px-2 py-1.5 rounded-md transition-colors font-mono ${
+                        active
+                          ? "bg-primary/15 text-foreground ring-1 ring-primary/30"
+                          : "hover:bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {shortName(s)}
+                    </button>
+                  );
+                })}
               </div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart
-                  data={chartData}
-                  margin={{ top: 5, right: 10, left: -10, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                  <XAxis
-                    dataKey="t"
-                    stroke="var(--color-muted-foreground)"
-                    fontSize={11}
-                    tickMargin={6}
-                  />
-                  <YAxis
-                    stroke="var(--color-muted-foreground)"
-                    fontSize={11}
-                    tickMargin={4}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      background: "var(--color-popover)",
-                      border: "1px solid var(--color-border)",
-                      borderRadius: 8,
-                      fontSize: 12,
-                    }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  {selectedTrains
-                    .filter((t) => queries.find((q) => q.train === t)?.data)
-                    .map((t, i) => (
-                      <Line
-                        key={t}
-                        type="monotone"
-                        dataKey={t}
-                        stroke={CHART_COLORS[i % CHART_COLORS.length]}
-                        strokeWidth={1.8}
-                        dot={false}
-                        connectNulls
-                        name={t}
-                      />
-                    ))}
-                </LineChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      </div>
 
-      {/* Latest value comparison */}
+      {/* Latest value summary */}
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-medium text-muted-foreground">
-            Latest reading per train
+            Latest readings
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {trainNames.map((t) => {
-              const q = queries.find((x) => x.train === t);
-              const last = q?.data?.rows[q.data.rows.length - 1];
-              const v = effectiveSensor && last ? last[effectiveSensor] : null;
-              return (
-                <Card key={t} className="bg-muted/30">
-                  <CardContent className="py-3 px-4">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider">
-                      {t}
-                    </p>
-                    <p className="text-xl font-mono font-semibold mt-1">
-                      {typeof v === "number" ? v.toFixed(2) : "—"}
-                    </p>
-                    <p className="text-[10px] font-mono text-muted-foreground mt-0.5">
-                      {last?.__timestamp
-                        ? format(last.__timestamp, "MM/dd HH:mm")
-                        : "no data"}
-                    </p>
-                  </CardContent>
-                </Card>
-              );
-            })}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {latestPerSeries.map((s) => (
+              <Card key={s.key} className="bg-muted/30">
+                <CardContent className="py-3 px-4">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider truncate">
+                    {s.train}
+                  </p>
+                  <p className="text-[10px] font-mono text-muted-foreground truncate">
+                    {shortName(s.sensor)}
+                  </p>
+                  <p className="text-xl font-mono font-semibold mt-1">
+                    {typeof s.value === "number" ? s.value.toFixed(2) : "—"}
+                  </p>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         </CardContent>
       </Card>
     </div>
   );
 }
+
+// ---------- chart variants ----------
+
+type Series = { key: string; train: string; sensor: string; label: string };
+
+function LineCompare({
+  data,
+  series,
+}: {
+  data: Record<string, string | number | null>[];
+  series: Series[];
+}) {
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart data={data} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+        <XAxis dataKey="t" stroke="var(--color-muted-foreground)" fontSize={11} tickMargin={6} />
+        <YAxis stroke="var(--color-muted-foreground)" fontSize={11} tickMargin={4} />
+        <Tooltip
+          contentStyle={{
+            background: "var(--color-popover)",
+            border: "1px solid var(--color-border)",
+            borderRadius: 8,
+            fontSize: 12,
+          }}
+        />
+        <Legend wrapperStyle={{ fontSize: 11 }} />
+        {series.map((s, i) => (
+          <Line
+            key={s.key}
+            type="monotone"
+            dataKey={s.key}
+            stroke={CHART_COLORS[i % CHART_COLORS.length]}
+            strokeWidth={1.8}
+            dot={false}
+            connectNulls
+            name={s.label}
+          />
+        ))}
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+function BarCompare({
+  data,
+  series,
+}: {
+  data: Record<string, string | number | null>[];
+  series: Series[];
+}) {
+  // Show only the most recent 24 timestamps so bars are legible
+  const trimmed = data.slice(-24);
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={trimmed} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+        <XAxis dataKey="t" stroke="var(--color-muted-foreground)" fontSize={11} tickMargin={6} />
+        <YAxis stroke="var(--color-muted-foreground)" fontSize={11} tickMargin={4} />
+        <Tooltip
+          contentStyle={{
+            background: "var(--color-popover)",
+            border: "1px solid var(--color-border)",
+            borderRadius: 8,
+            fontSize: 12,
+          }}
+        />
+        <Legend wrapperStyle={{ fontSize: 11 }} />
+        {series.map((s, i) => (
+          <Bar
+            key={s.key}
+            dataKey={s.key}
+            fill={CHART_COLORS[i % CHART_COLORS.length]}
+            name={s.label}
+          />
+        ))}
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function PieCompare({
+  latest,
+}: {
+  latest: (Series & { value: number | null })[];
+}) {
+  const items = latest
+    .filter((d) => typeof d.value === "number" && (d.value as number) > 0)
+    .map((d) => ({ name: d.label, value: d.value as number }));
+  if (items.length === 0) {
+    return (
+      <div className="h-full grid place-items-center text-sm text-muted-foreground">
+        No positive latest values to render as a pie
+      </div>
+    );
+  }
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <PieChart>
+        <Tooltip
+          contentStyle={{
+            background: "var(--color-popover)",
+            border: "1px solid var(--color-border)",
+            borderRadius: 8,
+            fontSize: 12,
+          }}
+        />
+        <Legend wrapperStyle={{ fontSize: 11 }} />
+        <Pie
+          data={items}
+          dataKey="value"
+          nameKey="name"
+          outerRadius="75%"
+          label={(d) => d.name}
+        >
+          {items.map((_, i) => (
+            <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+          ))}
+        </Pie>
+      </PieChart>
+    </ResponsiveContainer>
+  );
+}
+
+function HeatmapCompare({
+  data,
+  series,
+}: {
+  data: Record<string, string | number | null>[];
+  series: Series[];
+}) {
+  // Use the most recent N timestamps so cells stay visible
+  const N = 40;
+  const slice = data.slice(-N);
+  if (slice.length === 0 || series.length === 0) {
+    return (
+      <div className="h-full grid place-items-center text-sm text-muted-foreground">
+        No data to render
+      </div>
+    );
+  }
+
+  // Compute min/max per series for row-normalised color
+  const stats = series.map((s) => {
+    let min = Infinity;
+    let max = -Infinity;
+    for (const row of slice) {
+      const v = row[s.key];
+      if (typeof v === "number") {
+        if (v < min) min = v;
+        if (v > max) max = v;
+      }
+    }
+    return { min, max };
+  });
+
+  return (
+    <ScrollArea className="h-full w-full">
+      <div className="min-w-fit">
+        <div
+          className="grid gap-px"
+          style={{
+            gridTemplateColumns: `180px repeat(${slice.length}, 22px)`,
+          }}
+        >
+          {/* Header row */}
+          <div className="text-[10px] font-mono text-muted-foreground sticky left-0 bg-card px-2 py-1">
+            sensor · train
+          </div>
+          {slice.map((row, i) => (
+            <div
+              key={i}
+              className="text-[9px] font-mono text-muted-foreground -rotate-90 origin-left h-6 translate-y-5 whitespace-nowrap"
+            >
+              {String(row.t)}
+            </div>
+          ))}
+
+          {/* Data rows */}
+          {series.map((s, rIdx) => {
+            const { min, max } = stats[rIdx];
+            const range = max - min || 1;
+            return (
+              <Fragment key={s.key}>
+                <div
+                  key={`label-${s.key}`}
+                  className="text-[10px] font-mono px-2 py-1 truncate sticky left-0 bg-card border-r border-border"
+                  title={s.key}
+                >
+                  {s.label}
+                </div>
+                {slice.map((row, cIdx) => {
+                  const v = row[s.key];
+                  const n = typeof v === "number" ? (v - min) / range : null;
+                  const bg =
+                    n === null
+                      ? "transparent"
+                      : `color-mix(in oklab, var(--color-primary) ${Math.round(
+                          n * 100
+                        )}%, var(--color-muted))`;
+                  return (
+                    <div
+                      key={`${s.key}-${cIdx}`}
+                      className="h-6 rounded-sm"
+                      style={{ background: bg }}
+                      title={typeof v === "number" ? `${s.label}: ${v.toFixed(2)}` : "—"}
+                    />
+                  );
+                })}
+              </Fragment>
+            );
+          })}
+        </div>
+      </div>
+    </ScrollArea>
+  );
+}
+
 
