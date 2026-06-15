@@ -165,18 +165,25 @@ function Dashboard() {
               variant="outline"
               size="icon"
               onClick={() => {
-                if (mode === "single") query.refetch();
-                else compareQueries.forEach((q) => q.refetch());
+                if (mode === "single") {
+                  query.refetch();
+                  siteQuery.refetch();
+                } else {
+                  compareQueries.forEach((q) => q.refetch());
+                  siteQuery.refetch();
+                }
               }}
               disabled={
                 mode === "single"
-                  ? query.isFetching
+                  ? query.isFetching || siteQuery.isFetching
                   : compareQueries.some((q) => q.isFetching)
               }
             >
               <RefreshCw
                 className={`size-4 ${
-                  (mode === "single" ? query.isFetching : compareQueries.some((q) => q.isFetching))
+                  (mode === "single"
+                    ? query.isFetching || siteQuery.isFetching
+                    : compareQueries.some((q) => q.isFetching))
                     ? "animate-spin"
                     : ""
                 }`}
@@ -193,7 +200,15 @@ function Dashboard() {
             {url && query.isLoading && <Loading />}
             {url && query.error && <ErrorView error={query.error as Error} />}
             {url && query.data && (
-              <DashboardBody data={query.data.rows} columns={query.data.columns} />
+              <DashboardBody
+                data={query.data.rows}
+                columns={query.data.columns}
+                train={train}
+                siteRows={siteQuery.data?.rows}
+                siteColumns={siteQuery.data?.columns}
+                siteLoading={siteQuery.isLoading}
+                siteError={siteQuery.error as Error | null}
+              />
             )}
           </>
         )}
