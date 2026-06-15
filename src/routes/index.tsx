@@ -201,6 +201,7 @@ function Dashboard() {
             {url && query.error && <ErrorView error={query.error as Error} />}
             {url && query.data && (
               <DashboardBody
+                key={train}
                 data={query.data.rows}
                 columns={query.data.columns}
                 train={train}
