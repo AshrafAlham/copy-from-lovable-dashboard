@@ -499,7 +499,7 @@ function DashboardBody({
           </div>
         </CardHeader>
         <CardContent>
-          <RawTable data={data} columns={columns} search={search} />
+          <RawTable data={filteredData} columns={columns} search={search} />
         </CardContent>
       </Card>
     </div>
