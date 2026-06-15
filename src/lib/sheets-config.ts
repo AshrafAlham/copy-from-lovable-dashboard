@@ -8,6 +8,20 @@ export const TRAIN_SHEETS: Record<string, string> = {
   "Train D": "https://docs.google.com/spreadsheets/d/e/2PACX-1vS-FWIH-J19DvqkbnBuiDRRsbQHjkXzF_JdCWw9RG5EkCUqC0E9mZYo8AhHAgDaYAPJuTf5oBgRq_ih/pub?output=csv",
 };
 
+// Site Conditions sheet: contains general plant data + per-train sensors.
+// Per-train sensors are identified by the digit immediately after the dash
+// inside their tag, e.g. (PDI-1314) → Train A, (PIT-2226A) → Train B, etc.
+export const SITE_CONDITIONS_SHEET =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vRlQGwma1X4tuXc7TOO5aev3tp9xx_8jp59aJY_eri6zPM3lXsD-xPnjbC2BSqDYIu3H750igxTJq-q/pub?output=csv";
+
+// Map a Train name ↔ the digit used in its Site Conditions tags.
+export const TRAIN_TAG_DIGIT: Record<string, "1" | "2" | "3" | "4"> = {
+  "Train A": "1",
+  "Train B": "2",
+  "Train C": "3",
+  "Train D": "4",
+};
+
 // Columns that are metadata (not numeric sensor readings).
 export const META_COLUMNS = new Set([
   "Timestamp",
@@ -17,6 +31,9 @@ export const META_COLUMNS = new Set([
   "الاسم",
   "Column 1",
   "Shift Engineer",
+  "Train in service",
+  "Train Mode",
+  "Trian Mode",
 ]);
 
 // Section groupings — first matching rule wins. Order matters.
@@ -44,4 +61,56 @@ export function groupColumns(columns: string[]): Record<string, string[]> {
     out[sec.name].push(col);
   }
   return Object.fromEntries(Object.entries(out).filter(([, v]) => v.length));
+}
+
+// --- Site Conditions classification ----------------------------------------
+
+// Try to extract the train digit from a Site Conditions column header.
+// 1) tag form: "(PDI-1314) ..." or "(PIT-2226A) ..." — digit right after "-"
+// 2) fallback: explicit "Comp A", "Compressor B", "Turbine C", "Gearbox D",
+//    "Train A", etc.
+const LETTER_TO_DIGIT: Record<string, "1" | "2" | "3" | "4"> = {
+  A: "1",
+  B: "2",
+  C: "3",
+  D: "4",
+};
+
+export function siteColumnTrainDigit(col: string): "1" | "2" | "3" | "4" | null {
+  const tag = col.match(/\([A-Za-z]+-([1-4])\d/);
+  if (tag) return tag[1] as "1" | "2" | "3" | "4";
+  const named = col.match(/\b(?:Comp|Compressor|Turbine|Gearbox|Train|Trian)\s+([ABCD])\b/);
+  if (named) return LETTER_TO_DIGIT[named[1]];
+  return null;
+}
+
+export interface SplitSiteColumns {
+  general: string[];
+  byTrain: Record<string, string[]>; // train name → columns
+}
+
+export function splitSiteColumns(columns: string[]): SplitSiteColumns {
+  const byTrain: Record<string, string[]> = {
+    "Train A": [],
+    "Train B": [],
+    "Train C": [],
+    "Train D": [],
+  };
+  const general: string[] = [];
+  const digitToTrain: Record<string, string> = {
+    "1": "Train A",
+    "2": "Train B",
+    "3": "Train C",
+    "4": "Train D",
+  };
+  for (const col of columns) {
+    if (!col) continue;
+    if (META_COLUMNS.has(col) || META_COLUMNS.has(col.trim())) continue;
+    // Skip the timestamp/first-column header (often a stray date string).
+    if (col === "Timestamp" || /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(col.trim())) continue;
+    const digit = siteColumnTrainDigit(col);
+    if (digit) byTrain[digitToTrain[digit]].push(col);
+    else general.push(col);
+  }
+  return { general, byTrain };
 }
