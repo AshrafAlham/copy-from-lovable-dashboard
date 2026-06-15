@@ -19,7 +19,12 @@ import {
 import { format } from "date-fns";
 
 import { fetchSheet, type Row } from "@/lib/parse-sheet";
-import { TRAIN_SHEETS, groupColumns } from "@/lib/sheets-config";
+import {
+  TRAIN_SHEETS,
+  SITE_CONDITIONS_SHEET,
+  groupColumns,
+  splitSiteColumns,
+} from "@/lib/sheets-config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
