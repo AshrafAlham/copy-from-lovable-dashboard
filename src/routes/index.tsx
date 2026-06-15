@@ -99,6 +99,16 @@ function Dashboard() {
     refetchOnWindowFocus: false,
   });
 
+  // Site Conditions sheet — general plant data + per-train tagged sensors.
+  const siteQuery = useQuery({
+    queryKey: ["sheet", "site-conditions", SITE_CONDITIONS_SHEET],
+    queryFn: () => fetchSheet(SITE_CONDITIONS_SHEET),
+    enabled: !!SITE_CONDITIONS_SHEET,
+    refetchInterval: () => msUntilNext11AM(),
+    staleTime: ONE_DAY,
+    refetchOnWindowFocus: false,
+  });
+
   // For compare mode: fetch all trains in parallel
   const compareQueries = useQueries({
     queries: trainNames.map((t) => ({
