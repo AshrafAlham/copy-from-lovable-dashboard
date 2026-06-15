@@ -27,8 +27,9 @@ export async function fetchSheet(url: string): Promise<SheetData> {
     skipEmptyLines: true,
   });
   const columns = parsed.meta.fields ?? [];
+  const tsCol = columns.includes("Timestamp") ? "Timestamp" : columns[0];
   const rows: Row[] = parsed.data.map((r) => {
-    const out: Row = { __timestamp: parseTimestamp(r["Timestamp"] ?? "") };
+    const out: Row = { __timestamp: parseTimestamp(r[tsCol] ?? "") };
     for (const col of columns) {
       const raw = r[col];
       if (raw === undefined || raw === "") {

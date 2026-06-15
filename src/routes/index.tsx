@@ -19,7 +19,12 @@ import {
 import { format } from "date-fns";
 
 import { fetchSheet, type Row } from "@/lib/parse-sheet";
-import { TRAIN_SHEETS, groupColumns } from "@/lib/sheets-config";
+import {
+  TRAIN_SHEETS,
+  SITE_CONDITIONS_SHEET,
+  groupColumns,
+  splitSiteColumns,
+} from "@/lib/sheets-config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -94,6 +99,16 @@ function Dashboard() {
     refetchOnWindowFocus: false,
   });
 
+  // Site Conditions sheet — general plant data + per-train tagged sensors.
+  const siteQuery = useQuery({
+    queryKey: ["sheet", "site-conditions", SITE_CONDITIONS_SHEET],
+    queryFn: () => fetchSheet(SITE_CONDITIONS_SHEET),
+    enabled: !!SITE_CONDITIONS_SHEET,
+    refetchInterval: () => msUntilNext11AM(),
+    staleTime: ONE_DAY,
+    refetchOnWindowFocus: false,
+  });
+
   // For compare mode: fetch all trains in parallel
   const compareQueries = useQueries({
     queries: trainNames.map((t) => ({
@@ -150,18 +165,25 @@ function Dashboard() {
               variant="outline"
               size="icon"
               onClick={() => {
-                if (mode === "single") query.refetch();
-                else compareQueries.forEach((q) => q.refetch());
+                if (mode === "single") {
+                  query.refetch();
+                  siteQuery.refetch();
+                } else {
+                  compareQueries.forEach((q) => q.refetch());
+                  siteQuery.refetch();
+                }
               }}
               disabled={
                 mode === "single"
-                  ? query.isFetching
+                  ? query.isFetching || siteQuery.isFetching
                   : compareQueries.some((q) => q.isFetching)
               }
             >
               <RefreshCw
                 className={`size-4 ${
-                  (mode === "single" ? query.isFetching : compareQueries.some((q) => q.isFetching))
+                  (mode === "single"
+                    ? query.isFetching || siteQuery.isFetching
+                    : compareQueries.some((q) => q.isFetching))
                     ? "animate-spin"
                     : ""
                 }`}
@@ -178,7 +200,15 @@ function Dashboard() {
             {url && query.isLoading && <Loading />}
             {url && query.error && <ErrorView error={query.error as Error} />}
             {url && query.data && (
-              <DashboardBody data={query.data.rows} columns={query.data.columns} />
+              <DashboardBody
+                data={query.data.rows}
+                columns={query.data.columns}
+                train={train}
+                siteRows={siteQuery.data?.rows}
+                siteColumns={siteQuery.data?.columns}
+                siteLoading={siteQuery.isLoading}
+                siteError={siteQuery.error as Error | null}
+              />
             )}
           </>
         )}
@@ -240,26 +270,128 @@ function ErrorView({ error }: { error: Error }) {
   );
 }
 
-function DashboardBody({ data, columns }: { data: Row[]; columns: string[] }) {
+function DashboardBody({
+  data,
+  columns,
+  train,
+  siteRows,
+  siteColumns,
+  siteLoading,
+  siteError,
+}: {
+  data: Row[];
+  columns: string[];
+  train: string;
+  siteRows?: Row[];
+  siteColumns?: string[];
+  siteLoading?: boolean;
+  siteError?: Error | null;
+}) {
   const [search, setSearch] = useState("");
   const groups = useMemo(() => groupColumns(columns), [columns]);
   const groupNames = Object.keys(groups);
-  const [activeGroup, setActiveGroup] = useState(groupNames[0] ?? "");
 
-  const latest = data[data.length - 1];
-  const previous = data[data.length - 2];
+  // -- Time frame (date range) applied to BOTH the train sheet and the
+  //    Site Conditions sheet so the user can extract a consistent slice.
+  const overallRange = useMemo(() => {
+    const all: number[] = [];
+    for (const r of data) if (r.__timestamp) all.push(r.__timestamp.getTime());
+    for (const r of siteRows ?? [])
+      if (r.__timestamp) all.push(r.__timestamp.getTime());
+    if (!all.length) return null;
+    return { min: Math.min(...all), max: Math.max(...all) };
+  }, [data, siteRows]);
 
-  const kpis = useMemo(() => buildKpis(data, columns), [data, columns]);
+  const toInput = (ms: number) => format(new Date(ms), "yyyy-MM-dd");
+  const [from, setFrom] = useState<string>("");
+  const [to, setTo] = useState<string>("");
+
+  const fromMs = from ? new Date(from + "T00:00:00").getTime() : null;
+  const toMs = to ? new Date(to + "T23:59:59").getTime() : null;
+
+  const inRange = (r: Row) => {
+    const t = r.__timestamp?.getTime();
+    if (t == null) return false;
+    if (fromMs != null && t < fromMs) return false;
+    if (toMs != null && t > toMs) return false;
+    return true;
+  };
+
+  const filteredData = useMemo(
+    () => (fromMs || toMs ? data.filter(inRange) : data),
+    [data, fromMs, toMs]
+  );
+  const filteredSite = useMemo(
+    () => (siteRows ? (fromMs || toMs ? siteRows.filter(inRange) : siteRows) : []),
+    [siteRows, fromMs, toMs]
+  );
+
+  const siteSplit = useMemo(
+    () => (siteColumns ? splitSiteColumns(siteColumns) : null),
+    [siteColumns]
+  );
+  const siteGeneral = siteSplit?.general ?? [];
+  const siteForTrain = siteSplit?.byTrain[train] ?? [];
+
+  // Build the full set of section tabs, including Site Conditions.
+  type TabDef = {
+    key: string;
+    label: string;
+    count: number;
+    sensors: string[];
+    source: "train" | "site";
+  };
+  const allTabs = useMemo<TabDef[]>(() => {
+    const tabs: TabDef[] = groupNames.map((g) => ({
+      key: g,
+      label: g,
+      count: groups[g].length,
+      sensors: groups[g],
+      source: "train",
+    }));
+    if (siteGeneral.length)
+      tabs.push({
+        key: "__site_general__",
+        label: "Site — General",
+        count: siteGeneral.length,
+        sensors: siteGeneral,
+        source: "site",
+      });
+    if (siteForTrain.length)
+      tabs.push({
+        key: "__site_train__",
+        label: `Site — ${train}`,
+        count: siteForTrain.length,
+        sensors: siteForTrain,
+        source: "site",
+      });
+    return tabs;
+  }, [groupNames, groups, siteGeneral, siteForTrain, train]);
+
+  const [activeGroup, setActiveGroup] = useState(allTabs[0]?.key ?? "");
+  if (activeGroup && !allTabs.find((t) => t.key === activeGroup)) {
+    // active tab disappeared after data shape change
+    setActiveGroup(allTabs[0]?.key ?? "");
+  }
+
+  const latest = filteredData[filteredData.length - 1];
+  const previous = filteredData[filteredData.length - 2];
+
+  const kpis = useMemo(
+    () => buildKpis(filteredData, columns),
+    [filteredData, columns]
+  );
 
   return (
     <div className="space-y-6">
-      {/* Status strip */}
+      {/* Status strip + Time Frame */}
       <Card>
-        <CardContent className="py-4 flex flex-wrap items-center gap-6 justify-between">
+        <CardContent className="py-4 flex flex-wrap items-center gap-4 justify-between">
           <div className="flex items-center gap-2">
             <span className="size-2 rounded-full bg-success animate-pulse" />
             <span className="text-sm font-mono text-muted-foreground">
-              {data.length} readings · last:{" "}
+              {filteredData.length}/{data.length} train · {filteredSite.length}/
+              {siteRows?.length ?? 0} site · last:{" "}
               <span className="text-foreground">
                 {latest?.__timestamp
                   ? format(latest.__timestamp, "PP HH:mm")
@@ -267,12 +399,60 @@ function DashboardBody({ data, columns }: { data: Row[]; columns: string[] }) {
               </span>
             </span>
           </div>
-          <Badge variant="outline" className="font-mono">
-            <Activity className="size-3 mr-1" />
-            {columns.length} sensors tracked
-          </Badge>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs uppercase tracking-wider text-muted-foreground">
+              Time frame
+            </span>
+            <Input
+              type="date"
+              value={from}
+              min={overallRange ? toInput(overallRange.min) : undefined}
+              max={overallRange ? toInput(overallRange.max) : undefined}
+              onChange={(e) => setFrom(e.target.value)}
+              className="h-8 w-[150px] text-xs"
+            />
+            <span className="text-xs text-muted-foreground">→</span>
+            <Input
+              type="date"
+              value={to}
+              min={overallRange ? toInput(overallRange.min) : undefined}
+              max={overallRange ? toInput(overallRange.max) : undefined}
+              onChange={(e) => setTo(e.target.value)}
+              className="h-8 w-[150px] text-xs"
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => {
+                setFrom("");
+                setTo("");
+              }}
+              disabled={!from && !to}
+            >
+              Reset
+            </Button>
+            <Badge variant="outline" className="font-mono">
+              <Activity className="size-3 mr-1" />
+              {columns.length} sensors
+            </Badge>
+          </div>
         </CardContent>
       </Card>
+
+      {/* Site Conditions load state hint */}
+      {siteLoading && (
+        <p className="text-xs text-muted-foreground font-mono">
+          Loading Site Conditions sheet…
+        </p>
+      )}
+      {siteError && (
+        <Card className="border-warning/40">
+          <CardContent className="py-3 text-xs font-mono text-warning">
+            Site Conditions sheet failed to load: {siteError.message}
+          </CardContent>
+        </Card>
+      )}
 
       {/* KPI grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -285,18 +465,22 @@ function DashboardBody({ data, columns }: { data: Row[]; columns: string[] }) {
       <Tabs value={activeGroup} onValueChange={setActiveGroup}>
         <ScrollArea className="w-full">
           <TabsList className="h-auto flex-wrap justify-start">
-            {groupNames.map((g) => (
-              <TabsTrigger key={g} value={g} className="text-xs">
-                {g}{" "}
-                <span className="ml-1 opacity-60">({groups[g].length})</span>
+            {allTabs.map((g) => (
+              <TabsTrigger key={g.key} value={g.key} className="text-xs">
+                {g.label}{" "}
+                <span className="ml-1 opacity-60">({g.count})</span>
               </TabsTrigger>
             ))}
           </TabsList>
         </ScrollArea>
 
-        {groupNames.map((g) => (
-          <TabsContent key={g} value={g} className="space-y-4 mt-4">
-            <SectionView sensors={groups[g]} data={data} sectionName={g} />
+        {allTabs.map((g) => (
+          <TabsContent key={g.key} value={g.key} className="space-y-4 mt-4">
+            <SectionView
+              sensors={g.sensors}
+              data={g.source === "site" ? filteredSite : filteredData}
+              sectionName={g.label}
+            />
           </TabsContent>
         ))}
       </Tabs>
@@ -315,7 +499,7 @@ function DashboardBody({ data, columns }: { data: Row[]; columns: string[] }) {
           </div>
         </CardHeader>
         <CardContent>
-          <RawTable data={data} columns={columns} search={search} />
+          <RawTable data={filteredData} columns={columns} search={search} />
         </CardContent>
       </Card>
     </div>
