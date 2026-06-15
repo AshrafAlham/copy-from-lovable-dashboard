@@ -334,13 +334,20 @@ function DashboardBody({
   const siteForTrain = siteSplit?.byTrain[train] ?? [];
 
   // Build the full set of section tabs, including Site Conditions.
-  const allTabs = useMemo(() => {
-    const tabs = groupNames.map((g) => ({
+  type TabDef = {
+    key: string;
+    label: string;
+    count: number;
+    sensors: string[];
+    source: "train" | "site";
+  };
+  const allTabs = useMemo<TabDef[]>(() => {
+    const tabs: TabDef[] = groupNames.map((g) => ({
       key: g,
       label: g,
       count: groups[g].length,
       sensors: groups[g],
-      source: "train" as const,
+      source: "train",
     }));
     if (siteGeneral.length)
       tabs.push({
@@ -348,7 +355,7 @@ function DashboardBody({
         label: "Site — General",
         count: siteGeneral.length,
         sensors: siteGeneral,
-        source: "site" as const,
+        source: "site",
       });
     if (siteForTrain.length)
       tabs.push({
@@ -356,7 +363,7 @@ function DashboardBody({
         label: `Site — ${train}`,
         count: siteForTrain.length,
         sensors: siteForTrain,
-        source: "site" as const,
+        source: "site",
       });
     return tabs;
   }, [groupNames, groups, siteGeneral, siteForTrain, train]);
