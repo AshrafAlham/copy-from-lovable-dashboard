@@ -48,7 +48,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Activity, AlertTriangle, RefreshCw, Gauge } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Activity, AlertTriangle, RefreshCw, Gauge, Plus, X, LayoutGrid, Columns2, Rows } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
