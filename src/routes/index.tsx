@@ -839,35 +839,27 @@ function ChartPanel({
                 <SelectItem value="area">Area</SelectItem>
               </SelectContent>
             </Select>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 text-xs">
-                  Sensors ({sensors.length})
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-72 p-2" align="start">
-                <ScrollArea className="h-[280px] pr-2">
-                  <div className="space-y-1">
-                    {allSensors.map((s) => {
-                      const active = sensors.includes(s);
-                      return (
-                        <button
-                          key={s}
-                          onClick={() => toggleSensor(s)}
-                          className={`w-full text-left text-xs px-2 py-1.5 rounded-md transition-colors font-mono ${
-                            active
-                              ? "bg-primary/15 text-foreground ring-1 ring-primary/30"
-                              : "hover:bg-muted text-muted-foreground"
-                          }`}
-                        >
-                          {shortName(s)}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </ScrollArea>
-              </PopoverContent>
-            </Popover>
+            <span className="text-xs text-muted-foreground">
+              {sensors.length}/{allSensors.length} selected
+            </span>
+            <div className="flex gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => onChange({ sensors: [...allSensors] })}
+              >
+                All
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => onChange({ sensors: [] })}
+              >
+                None
+              </Button>
+            </div>
           </div>
           {canRemove && (
             <Button
