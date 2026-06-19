@@ -7,6 +7,8 @@ import {
   Line,
   BarChart,
   Bar,
+  AreaChart,
+  Area,
   PieChart,
   Pie,
   Cell,
@@ -46,7 +48,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Activity, AlertTriangle, RefreshCw, Gauge } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Activity, AlertTriangle, RefreshCw, Gauge, Plus, X, LayoutGrid, Columns2, Rows } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -609,6 +612,17 @@ function KpiCard({
   );
 }
 
+type PanelKind = "line" | "bar" | "area";
+
+interface ChartPanelConfig {
+  id: string;
+  kind: PanelKind;
+  sensors: string[];
+}
+
+let panelCounter = 0;
+const nextPanelId = () => `p${++panelCounter}_${Date.now().toString(36)}`;
+
 function SectionView({
   sensors,
   data,
@@ -618,10 +632,141 @@ function SectionView({
   data: Row[];
   sectionName: string;
 }) {
-  // Default-select first 6 sensors so charts aren't overwhelming
-  const [selected, setSelected] = useState<string[]>(() =>
-    sensors.slice(0, Math.min(6, sensors.length))
+  // Default: two panels (Line + Bar) sharing the first sensors.
+  const initialSensors = sensors.slice(0, Math.min(4, sensors.length));
+  const [panels, setPanels] = useState<ChartPanelConfig[]>(() => [
+    { id: nextPanelId(), kind: "line", sensors: initialSensors },
+    {
+      id: nextPanelId(),
+      kind: "bar",
+      sensors: sensors.slice(0, Math.min(3, sensors.length)),
+    },
+  ]);
+  const [cols, setCols] = useState<1 | 2 | 3>(2);
+
+  const addPanel = (kind: PanelKind) =>
+    setPanels((p) => [
+      ...p,
+      { id: nextPanelId(), kind, sensors: sensors.slice(0, Math.min(3, sensors.length)) },
+    ]);
+  const removePanel = (id: string) =>
+    setPanels((p) => p.filter((x) => x.id !== id));
+  const updatePanel = (id: string, patch: Partial<ChartPanelConfig>) =>
+    setPanels((p) => p.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+
+  const gridClass =
+    cols === 1
+      ? "grid-cols-1"
+      : cols === 2
+      ? "grid-cols-1 lg:grid-cols-2"
+      : "grid-cols-1 lg:grid-cols-2 xl:grid-cols-3";
+
+  return (
+    <div className="space-y-4">
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-2 justify-between">
+        <div className="flex items-center gap-1">
+          <span className="text-xs uppercase tracking-wider text-muted-foreground mr-2">
+            {sectionName} · {panels.length} chart{panels.length !== 1 && "s"}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs"
+            onClick={() => addPanel("line")}
+          >
+            <Plus className="size-3 mr-1" /> Line
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs"
+            onClick={() => addPanel("bar")}
+          >
+            <Plus className="size-3 mr-1" /> Bar
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs"
+            onClick={() => addPanel("area")}
+          >
+            <Plus className="size-3 mr-1" /> Area
+          </Button>
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-xs text-muted-foreground mr-1">Layout</span>
+          <Button
+            size="icon"
+            variant={cols === 1 ? "default" : "outline"}
+            className="size-8"
+            onClick={() => setCols(1)}
+            title="1 column"
+          >
+            <Rows className="size-3.5" />
+          </Button>
+          <Button
+            size="icon"
+            variant={cols === 2 ? "default" : "outline"}
+            className="size-8"
+            onClick={() => setCols(2)}
+            title="2 columns"
+          >
+            <Columns2 className="size-3.5" />
+          </Button>
+          <Button
+            size="icon"
+            variant={cols === 3 ? "default" : "outline"}
+            className="size-8"
+            onClick={() => setCols(3)}
+            title="3 columns"
+          >
+            <LayoutGrid className="size-3.5" />
+          </Button>
+        </div>
+      </div>
+
+      {panels.length === 0 ? (
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-muted-foreground">
+            No charts. Use the buttons above to add one.
+          </CardContent>
+        </Card>
+      ) : (
+        <div className={`grid gap-4 ${gridClass}`}>
+          {panels.map((panel) => (
+            <ChartPanel
+              key={panel.id}
+              config={panel}
+              data={data}
+              allSensors={sensors}
+              onChange={(patch) => updatePanel(panel.id, patch)}
+              onRemove={() => removePanel(panel.id)}
+              canRemove={panels.length > 1}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
+}
+
+function ChartPanel({
+  config,
+  data,
+  allSensors,
+  onChange,
+  onRemove,
+  canRemove,
+}: {
+  config: ChartPanelConfig;
+  data: Row[];
+  allSensors: string[];
+  onChange: (patch: Partial<ChartPanelConfig>) => void;
+  onRemove: () => void;
+  canRemove: boolean;
+}) {
+  const { kind, sensors } = config;
 
   const chartData = useMemo(
     () =>
@@ -631,59 +776,124 @@ function SectionView({
           const o: Record<string, string | number | null> = {
             t: format(r.__timestamp as Date, "MM/dd HH:mm"),
           };
-          for (const s of selected) {
+          for (const s of sensors) {
             const v = r[s];
             o[s] = typeof v === "number" ? v : null;
           }
           return o;
         }),
-    [data, selected]
+    [data, sensors]
   );
 
-  const toggle = (s: string) =>
-    setSelected((prev) =>
-      prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
-    );
+  // For bar charts we down-sample to the last ~30 points so bars are readable
+  const displayData = kind === "bar" ? chartData.slice(-30) : chartData;
+
+  const toggleSensor = (s: string) => {
+    const next = sensors.includes(s)
+      ? sensors.filter((x) => x !== s)
+      : [...sensors, s];
+    onChange({ sensors: next });
+  };
+
+  const commonAxes = (
+    <>
+      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+      <XAxis
+        dataKey="t"
+        stroke="var(--color-muted-foreground)"
+        fontSize={10}
+        tickMargin={6}
+      />
+      <YAxis
+        stroke="var(--color-muted-foreground)"
+        fontSize={10}
+        tickMargin={4}
+      />
+      <Tooltip
+        contentStyle={{
+          background: "var(--color-popover)",
+          border: "1px solid var(--color-border)",
+          borderRadius: 8,
+          fontSize: 12,
+        }}
+      />
+      <Legend wrapperStyle={{ fontSize: 11 }} />
+    </>
+  );
 
   return (
-    <div className="grid lg:grid-cols-[1fr_280px] gap-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium text-muted-foreground">
-            {sectionName} — Trend
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[400px]">
-            {selected.length === 0 ? (
-              <div className="h-full grid place-items-center text-sm text-muted-foreground">
-                Select sensors to plot →
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                  <XAxis
-                    dataKey="t"
-                    stroke="var(--color-muted-foreground)"
-                    fontSize={11}
-                    tickMargin={6}
-                  />
-                  <YAxis
-                    stroke="var(--color-muted-foreground)"
-                    fontSize={11}
-                    tickMargin={4}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      background: "var(--color-popover)",
-                      border: "1px solid var(--color-border)",
-                      borderRadius: 8,
-                      fontSize: 12,
-                    }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  {selected.map((s, i) => (
+    <Card>
+      <CardHeader className="pb-2">
+        <div className="flex items-center gap-2 justify-between flex-wrap">
+          <div className="flex items-center gap-2 min-w-0">
+            <Select
+              value={kind}
+              onValueChange={(v) => onChange({ kind: v as PanelKind })}
+            >
+              <SelectTrigger className="h-8 w-[110px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="line">Line</SelectItem>
+                <SelectItem value="bar">Bar</SelectItem>
+                <SelectItem value="area">Area</SelectItem>
+              </SelectContent>
+            </Select>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 text-xs">
+                  Sensors ({sensors.length})
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-72 p-2" align="start">
+                <ScrollArea className="h-[280px] pr-2">
+                  <div className="space-y-1">
+                    {allSensors.map((s) => {
+                      const active = sensors.includes(s);
+                      return (
+                        <button
+                          key={s}
+                          onClick={() => toggleSensor(s)}
+                          className={`w-full text-left text-xs px-2 py-1.5 rounded-md transition-colors font-mono ${
+                            active
+                              ? "bg-primary/15 text-foreground ring-1 ring-primary/30"
+                              : "hover:bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {shortName(s)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+              </PopoverContent>
+            </Popover>
+          </div>
+          {canRemove && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              onClick={onRemove}
+              title="Remove chart"
+            >
+              <X className="size-3.5" />
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="h-[320px]">
+          {sensors.length === 0 ? (
+            <div className="h-full grid place-items-center text-xs text-muted-foreground">
+              Pick sensors from the menu above
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              {kind === "line" ? (
+                <LineChart data={displayData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                  {commonAxes}
+                  {sensors.map((s, i) => (
                     <Line
                       key={s}
                       type="monotone"
@@ -696,42 +906,41 @@ function SectionView({
                     />
                   ))}
                 </LineChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">
-            Sensors ({selected.length}/{sensors.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="px-2">
-          <ScrollArea className="h-[400px] pr-2">
-            <div className="space-y-1">
-              {sensors.map((s) => {
-                const active = selected.includes(s);
-                return (
-                  <button
-                    key={s}
-                    onClick={() => toggle(s)}
-                    className={`w-full text-left text-xs px-2 py-1.5 rounded-md transition-colors font-mono ${
-                      active
-                        ? "bg-primary/15 text-foreground ring-1 ring-primary/30"
-                        : "hover:bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    {shortName(s)}
-                  </button>
-                );
-              })}
-            </div>
-          </ScrollArea>
-        </CardContent>
-      </Card>
-    </div>
+              ) : kind === "bar" ? (
+                <BarChart data={displayData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                  {commonAxes}
+                  {sensors.map((s, i) => (
+                    <Bar
+                      key={s}
+                      dataKey={s}
+                      fill={CHART_COLORS[i % CHART_COLORS.length]}
+                      name={shortName(s)}
+                    />
+                  ))}
+                </BarChart>
+              ) : (
+                <AreaChart data={displayData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                  {commonAxes}
+                  {sensors.map((s, i) => (
+                    <Area
+                      key={s}
+                      type="monotone"
+                      dataKey={s}
+                      stroke={CHART_COLORS[i % CHART_COLORS.length]}
+                      fill={CHART_COLORS[i % CHART_COLORS.length]}
+                      fillOpacity={0.2}
+                      strokeWidth={1.5}
+                      connectNulls
+                      name={shortName(s)}
+                    />
+                  ))}
+                </AreaChart>
+              )}
+            </ResponsiveContainer>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
