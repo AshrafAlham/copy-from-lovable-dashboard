@@ -7,6 +7,8 @@ import {
   Line,
   BarChart,
   Bar,
+  AreaChart,
+  Area,
   PieChart,
   Pie,
   Cell,
