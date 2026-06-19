@@ -875,6 +875,30 @@ function ChartPanel({
         </div>
       </CardHeader>
       <CardContent>
+        <ScrollArea className="h-[88px] mb-2 rounded-md border bg-muted/30 p-2">
+          <div className="flex flex-wrap gap-1">
+            {allSensors.length === 0 ? (
+              <span className="text-xs text-muted-foreground">No sensors in this group.</span>
+            ) : (
+              allSensors.map((s) => {
+                const active = sensors.includes(s);
+                return (
+                  <button
+                    key={s}
+                    onClick={() => toggleSensor(s)}
+                    className={`text-[11px] px-2 py-1 rounded-md font-mono transition-colors ${
+                      active
+                        ? "bg-primary/20 text-foreground ring-1 ring-primary/40"
+                        : "bg-background hover:bg-muted text-muted-foreground border"
+                    }`}
+                  >
+                    {shortName(s)}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </ScrollArea>
         <div className="h-[320px]">
           {sensors.length === 0 ? (
             <div className="h-full grid place-items-center text-xs text-muted-foreground">
