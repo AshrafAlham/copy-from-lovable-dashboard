@@ -465,29 +465,53 @@ function DashboardBody({
         ))}
       </div>
 
-      {/* Sections */}
-      <Tabs value={activeGroup} onValueChange={setActiveGroup}>
-        <ScrollArea className="w-full">
-          <TabsList className="h-auto flex-wrap justify-start">
-            {allTabs.map((g) => (
-              <TabsTrigger key={g.key} value={g.key} className="text-xs">
-                {g.label}{" "}
-                <span className="ml-1 opacity-60">({g.count})</span>
-              </TabsTrigger>
+      {/* Sections — sidebar pages */}
+      <div className="grid gap-4 md:grid-cols-[220px_1fr]">
+        <Card className="md:sticky md:top-24 md:self-start">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs uppercase tracking-wider text-muted-foreground">
+              Pages
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-2">
+            <ScrollArea className="max-h-[70vh]">
+              <nav className="flex flex-col gap-1">
+                {allTabs.map((g) => {
+                  const active = g.key === activeGroup;
+                  return (
+                    <button
+                      key={g.key}
+                      onClick={() => setActiveGroup(g.key)}
+                      className={`text-left text-sm px-3 py-2 rounded-md transition-colors flex items-center justify-between gap-2 ${
+                        active
+                          ? "bg-primary/15 text-primary ring-1 ring-primary/30"
+                          : "hover:bg-muted/60 text-foreground/80"
+                      }`}
+                    >
+                      <span className="truncate">{g.label}</span>
+                      <span className="text-xs opacity-60 font-mono">
+                        {g.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </nav>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+        <div className="min-w-0">
+          {allTabs
+            .filter((g) => g.key === activeGroup)
+            .map((g) => (
+              <SectionView
+                key={g.key}
+                sensors={g.sensors}
+                data={g.source === "site" ? filteredSite : filteredData}
+                sectionName={g.label}
+              />
             ))}
-          </TabsList>
-        </ScrollArea>
-
-        {allTabs.map((g) => (
-          <TabsContent key={g.key} value={g.key} className="space-y-4 mt-4">
-            <SectionView
-              sensors={g.sensors}
-              data={g.source === "site" ? filteredSite : filteredData}
-              sectionName={g.label}
-            />
-          </TabsContent>
-        ))}
-      </Tabs>
+        </div>
+      </div>
 
       {/* Raw data */}
       <Card>
