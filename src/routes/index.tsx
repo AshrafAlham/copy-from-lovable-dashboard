@@ -796,6 +796,8 @@ function ChartPanel({
   canRemove: boolean;
 }) {
   const { kind, sensors } = config;
+  const barMode: BarMode = config.barMode ?? "snapshot";
+  const barOrient: BarOrient = config.barOrient ?? "vertical";
 
   const chartData = useMemo(
     () =>
@@ -814,8 +816,24 @@ function ChartPanel({
     [data, sensors]
   );
 
-  // For bar charts we down-sample to the last ~30 points so bars are readable
-  const displayData = kind === "bar" ? chartData.slice(-30) : chartData;
+  // Snapshot: one bar per sensor using the latest non-null value.
+  const snapshotData = useMemo(() => {
+    return sensors.map((s) => {
+      let val: number | null = null;
+      for (let i = data.length - 1; i >= 0; i--) {
+        const v = data[i][s];
+        if (typeof v === "number") {
+          val = v;
+          break;
+        }
+      }
+      return { sensor: shortName(s), value: val };
+    });
+  }, [data, sensors]);
+
+  // Time-series bars: down-sample to last ~24 points so bars stay readable.
+  const displayData =
+    kind === "bar" && barMode === "timeseries" ? chartData.slice(-24) : chartData;
 
   const toggleSensor = (s: string) => {
     const next = sensors.includes(s)
