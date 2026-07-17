@@ -638,11 +638,15 @@ function KpiCard({
 }
 
 type PanelKind = "line" | "bar" | "area";
+type BarMode = "snapshot" | "timeseries";
+type BarOrient = "vertical" | "horizontal";
 
 interface ChartPanelConfig {
   id: string;
   kind: PanelKind;
   sensors: string[];
+  barMode?: BarMode;
+  barOrient?: BarOrient;
 }
 
 let panelCounter = 0;
