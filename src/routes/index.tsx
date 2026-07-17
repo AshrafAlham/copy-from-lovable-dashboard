@@ -907,7 +907,36 @@ function ChartPanel({
                 None
               </Button>
             </div>
-          </div>
+            {kind === "bar" && (
+              <div className="flex items-center gap-1">
+                <Select
+                  value={barMode}
+                  onValueChange={(v) => onChange({ barMode: v as BarMode })}
+                >
+                  <SelectTrigger className="h-8 w-[130px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="snapshot">Snapshot (latest)</SelectItem>
+                    <SelectItem value="timeseries">Time series</SelectItem>
+                  </SelectContent>
+                </Select>
+                {barMode === "snapshot" && (
+                  <Select
+                    value={barOrient}
+                    onValueChange={(v) => onChange({ barOrient: v as BarOrient })}
+                  >
+                    <SelectTrigger className="h-8 w-[110px] text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="vertical">Vertical</SelectItem>
+                      <SelectItem value="horizontal">Horizontal</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            )}
           {canRemove && (
             <Button
               variant="ghost"
