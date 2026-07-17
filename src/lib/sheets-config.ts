@@ -77,12 +77,15 @@ const LETTER_TO_DIGIT: Record<string, "1" | "2" | "3" | "4"> = {
 };
 
 export function siteColumnTrainDigit(col: string): "1" | "2" | "3" | "4" | null {
+  // Only tag-based routing: (PDI-1314) → 1, (PIT-2226A) → 2, etc.
+  // Named columns like "Compressor A Discharge T" or "Turbine B Oil Cooler"
+  // are plant-level cross-train readings and belong in "Site — General".
   const tag = col.match(/\([A-Za-z]+-([1-4])\d/);
   if (tag) return tag[1] as "1" | "2" | "3" | "4";
-  const named = col.match(/\b(?:Comp|Compressor|Turbine|Gearbox|Train|Trian)\s+([ABCD])\b/);
-  if (named) return LETTER_TO_DIGIT[named[1]];
   return null;
 }
+// Kept for backward-compat / potential re-use.
+void LETTER_TO_DIGIT;
 
 export interface SplitSiteColumns {
   general: string[];
