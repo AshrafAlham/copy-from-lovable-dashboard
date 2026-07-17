@@ -65,27 +65,14 @@ export function groupColumns(columns: string[]): Record<string, string[]> {
 
 // --- Site Conditions classification ----------------------------------------
 
-// Try to extract the train digit from a Site Conditions column header.
-// 1) tag form: "(PDI-1314) ..." or "(PIT-2226A) ..." — digit right after "-"
-// 2) fallback: explicit "Comp A", "Compressor B", "Turbine C", "Gearbox D",
-//    "Train A", etc.
-const LETTER_TO_DIGIT: Record<string, "1" | "2" | "3" | "4"> = {
-  A: "1",
-  B: "2",
-  C: "3",
-  D: "4",
-};
-
+// Try to extract the train digit from a Site Conditions column header
+// using the instrument tag, e.g. "(PDI-1314) ..." or "(PIT-2226A) ..." —
+// digit right after "-". Named columns without a tag are treated as general.
 export function siteColumnTrainDigit(col: string): "1" | "2" | "3" | "4" | null {
-  // Only tag-based routing: (PDI-1314) → 1, (PIT-2226A) → 2, etc.
-  // Named columns like "Compressor A Discharge T" or "Turbine B Oil Cooler"
-  // are plant-level cross-train readings and belong in "Site — General".
   const tag = col.match(/\([A-Za-z]+-([1-4])\d/);
   if (tag) return tag[1] as "1" | "2" | "3" | "4";
   return null;
 }
-// Kept for backward-compat / potential re-use.
-void LETTER_TO_DIGIT;
 
 export interface SplitSiteColumns {
   general: string[];
