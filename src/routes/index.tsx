@@ -937,6 +937,7 @@ function ChartPanel({
                 )}
               </div>
             )}
+          </div>
           {canRemove && (
             <Button
               variant="ghost"
