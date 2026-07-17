@@ -1000,17 +1000,74 @@ function ChartPanel({
                   ))}
                 </LineChart>
               ) : kind === "bar" ? (
-                <BarChart data={displayData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
-                  {commonAxes}
-                  {sensors.map((s, i) => (
-                    <Bar
-                      key={s}
-                      dataKey={s}
-                      fill={CHART_COLORS[i % CHART_COLORS.length]}
-                      name={shortName(s)}
+                barMode === "snapshot" ? (
+                  <BarChart
+                    data={snapshotData}
+                    layout={barOrient === "horizontal" ? "vertical" : "horizontal"}
+                    margin={{ top: 10, right: 20, left: barOrient === "horizontal" ? 40 : -10, bottom: 40 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                    {barOrient === "horizontal" ? (
+                      <>
+                        <XAxis type="number" stroke="var(--color-muted-foreground)" fontSize={10} />
+                        <YAxis
+                          type="category"
+                          dataKey="sensor"
+                          stroke="var(--color-muted-foreground)"
+                          fontSize={10}
+                          width={140}
+                          tick={{ fontSize: 10 }}
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <XAxis
+                          dataKey="sensor"
+                          stroke="var(--color-muted-foreground)"
+                          fontSize={10}
+                          angle={-25}
+                          textAnchor="end"
+                          interval={0}
+                          height={70}
+                        />
+                        <YAxis stroke="var(--color-muted-foreground)" fontSize={10} />
+                      </>
+                    )}
+                    <Tooltip
+                      contentStyle={{
+                        background: "var(--color-popover)",
+                        border: "1px solid var(--color-border)",
+                        borderRadius: 8,
+                        fontSize: 12,
+                      }}
                     />
-                  ))}
-                </BarChart>
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                      {snapshotData.map((_, i) => (
+                        <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                      ))}
+                      <LabelList
+                        dataKey="value"
+                        position={barOrient === "horizontal" ? "right" : "top"}
+                        style={{ fill: "var(--color-foreground)", fontSize: 10, fontFamily: "monospace" }}
+                        formatter={(v: unknown) =>
+                          typeof v === "number" ? v.toFixed(2) : ""
+                        }
+                      />
+                    </Bar>
+                  </BarChart>
+                ) : (
+                  <BarChart data={displayData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                    {commonAxes}
+                    {sensors.map((s, i) => (
+                      <Bar
+                        key={s}
+                        dataKey={s}
+                        fill={CHART_COLORS[i % CHART_COLORS.length]}
+                        name={shortName(s)}
+                      />
+                    ))}
+                  </BarChart>
+                )
               ) : (
                 <AreaChart data={displayData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
                   {commonAxes}
