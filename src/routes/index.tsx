@@ -17,6 +17,7 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  LabelList,
 } from "recharts";
 import { format } from "date-fns";
 
