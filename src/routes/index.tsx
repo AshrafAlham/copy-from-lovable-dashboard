@@ -17,6 +17,7 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  LabelList,
 } from "recharts";
 import { format } from "date-fns";
 
@@ -637,11 +638,15 @@ function KpiCard({
 }
 
 type PanelKind = "line" | "bar" | "area";
+type BarMode = "snapshot" | "timeseries";
+type BarOrient = "vertical" | "horizontal";
 
 interface ChartPanelConfig {
   id: string;
   kind: PanelKind;
   sensors: string[];
+  barMode?: BarMode;
+  barOrient?: BarOrient;
 }
 
 let panelCounter = 0;
@@ -791,6 +796,8 @@ function ChartPanel({
   canRemove: boolean;
 }) {
   const { kind, sensors } = config;
+  const barMode: BarMode = config.barMode ?? "snapshot";
+  const barOrient: BarOrient = config.barOrient ?? "vertical";
 
   const chartData = useMemo(
     () =>
@@ -809,8 +816,24 @@ function ChartPanel({
     [data, sensors]
   );
 
-  // For bar charts we down-sample to the last ~30 points so bars are readable
-  const displayData = kind === "bar" ? chartData.slice(-30) : chartData;
+  // Snapshot: one bar per sensor using the latest non-null value.
+  const snapshotData = useMemo(() => {
+    return sensors.map((s) => {
+      let val: number | null = null;
+      for (let i = data.length - 1; i >= 0; i--) {
+        const v = data[i][s];
+        if (typeof v === "number") {
+          val = v;
+          break;
+        }
+      }
+      return { sensor: shortName(s), value: val };
+    });
+  }, [data, sensors]);
+
+  // Time-series bars: down-sample to last ~24 points so bars stay readable.
+  const displayData =
+    kind === "bar" && barMode === "timeseries" ? chartData.slice(-24) : chartData;
 
   const toggleSensor = (s: string) => {
     const next = sensors.includes(s)
@@ -884,6 +907,36 @@ function ChartPanel({
                 None
               </Button>
             </div>
+            {kind === "bar" && (
+              <div className="flex items-center gap-1">
+                <Select
+                  value={barMode}
+                  onValueChange={(v) => onChange({ barMode: v as BarMode })}
+                >
+                  <SelectTrigger className="h-8 w-[130px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="snapshot">Snapshot (latest)</SelectItem>
+                    <SelectItem value="timeseries">Time series</SelectItem>
+                  </SelectContent>
+                </Select>
+                {barMode === "snapshot" && (
+                  <Select
+                    value={barOrient}
+                    onValueChange={(v) => onChange({ barOrient: v as BarOrient })}
+                  >
+                    <SelectTrigger className="h-8 w-[110px] text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="vertical">Vertical</SelectItem>
+                      <SelectItem value="horizontal">Horizontal</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            )}
           </div>
           {canRemove && (
             <Button
@@ -947,17 +1000,74 @@ function ChartPanel({
                   ))}
                 </LineChart>
               ) : kind === "bar" ? (
-                <BarChart data={displayData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
-                  {commonAxes}
-                  {sensors.map((s, i) => (
-                    <Bar
-                      key={s}
-                      dataKey={s}
-                      fill={CHART_COLORS[i % CHART_COLORS.length]}
-                      name={shortName(s)}
+                barMode === "snapshot" ? (
+                  <BarChart
+                    data={snapshotData}
+                    layout={barOrient === "horizontal" ? "vertical" : "horizontal"}
+                    margin={{ top: 10, right: 20, left: barOrient === "horizontal" ? 40 : -10, bottom: 40 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                    {barOrient === "horizontal" ? (
+                      <>
+                        <XAxis type="number" stroke="var(--color-muted-foreground)" fontSize={10} />
+                        <YAxis
+                          type="category"
+                          dataKey="sensor"
+                          stroke="var(--color-muted-foreground)"
+                          fontSize={10}
+                          width={140}
+                          tick={{ fontSize: 10 }}
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <XAxis
+                          dataKey="sensor"
+                          stroke="var(--color-muted-foreground)"
+                          fontSize={10}
+                          angle={-25}
+                          textAnchor="end"
+                          interval={0}
+                          height={70}
+                        />
+                        <YAxis stroke="var(--color-muted-foreground)" fontSize={10} />
+                      </>
+                    )}
+                    <Tooltip
+                      contentStyle={{
+                        background: "var(--color-popover)",
+                        border: "1px solid var(--color-border)",
+                        borderRadius: 8,
+                        fontSize: 12,
+                      }}
                     />
-                  ))}
-                </BarChart>
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                      {snapshotData.map((_, i) => (
+                        <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                      ))}
+                      <LabelList
+                        dataKey="value"
+                        position={barOrient === "horizontal" ? "right" : "top"}
+                        style={{ fill: "var(--color-foreground)", fontSize: 10, fontFamily: "monospace" }}
+                        formatter={(v: unknown) =>
+                          typeof v === "number" ? v.toFixed(2) : ""
+                        }
+                      />
+                    </Bar>
+                  </BarChart>
+                ) : (
+                  <BarChart data={displayData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                    {commonAxes}
+                    {sensors.map((s, i) => (
+                      <Bar
+                        key={s}
+                        dataKey={s}
+                        fill={CHART_COLORS[i % CHART_COLORS.length]}
+                        name={shortName(s)}
+                      />
+                    ))}
+                  </BarChart>
+                )
               ) : (
                 <AreaChart data={displayData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
                   {commonAxes}
