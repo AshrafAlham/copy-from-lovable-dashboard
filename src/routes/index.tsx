@@ -549,6 +549,7 @@ interface Kpi {
   column: string;
   unit?: string;
   tone?: "default" | "warning" | "danger";
+  groups?: string[];
 }
 
 function buildKpis(data: Row[], columns: string[]): Kpi[] {
@@ -573,14 +574,25 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
       return m;
     }, null);
 
+  const BEARING_TEMP_GROUPS = [
+    "Turbine Bearings — Temperature",
+    "Compressor Bearings — Temperature",
+    "Gearbox Bearings — Temperature",
+  ];
+  const VIB_GROUPS = [
+    "Turbine Bearings — Vibration",
+    "Compressor Bearings — Vibration",
+    "Gearbox Bearings — Vibration",
+  ];
+
   const items: Kpi[] = [
-    { label: "Lube Oil P", value: getNum(latest, lubeP), column: lubeP ?? "", unit: "bar" },
-    { label: "Lube Oil T", value: getNum(latest, lubeT), column: lubeT ?? "", unit: "°C" },
-    { label: "Oil Tank T", value: getNum(latest, oilTank), column: oilTank ?? "", unit: "°C" },
-    { label: "Exhaust Mean", value: getNum(latest, exhaustMean), column: exhaustMean ?? "", unit: "°C" },
-    { label: "Max Bearing T", value: maxNum(tempCols), column: "", unit: "°C" },
-    { label: "Max Vibration", value: maxNum(vibCols), column: "", unit: "mm/s" },
-    { label: "FSR", value: getNum(latest, fsr), column: fsr ?? "", unit: "%" },
+    { label: "Lube Oil P", value: getNum(latest, lubeP), column: lubeP ?? "", unit: "bar", groups: ["Lube Oil"] },
+    { label: "Lube Oil T", value: getNum(latest, lubeT), column: lubeT ?? "", unit: "°C", groups: ["Lube Oil"] },
+    { label: "Oil Tank T", value: getNum(latest, oilTank), column: oilTank ?? "", unit: "°C", groups: ["Lube Oil"] },
+    { label: "Exhaust Mean", value: getNum(latest, exhaustMean), column: exhaustMean ?? "", unit: "°C", groups: ["Exhaust"] },
+    { label: "Max Bearing T", value: maxNum(tempCols), column: "", unit: "°C", groups: BEARING_TEMP_GROUPS },
+    { label: "Max Vibration", value: maxNum(vibCols), column: "", unit: "mm/s", groups: VIB_GROUPS },
+    { label: "FSR", value: getNum(latest, fsr), column: fsr ?? "", unit: "%", groups: ["Control"] },
   ].filter((k) => k.value !== null);
 
   // Tone heuristics
@@ -592,6 +604,7 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
     return k;
   });
 }
+
 
 function getNum(row: Row | undefined, col?: string): number | null {
   if (!row || !col) return null;
