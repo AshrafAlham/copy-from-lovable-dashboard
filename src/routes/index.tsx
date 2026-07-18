@@ -464,12 +464,15 @@ function DashboardBody({
         </Card>
       )}
 
-      {/* KPI grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        {kpis.map((k) => (
-          <KpiCard key={k.label} {...k} previous={previous} />
-        ))}
-      </div>
+      {/* KPI grid — filtered by the currently selected system/page */}
+      {visibleKpis.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          {visibleKpis.map((k) => (
+            <KpiCard key={k.label} {...k} previous={previous} />
+          ))}
+        </div>
+      )}
+
 
       {/* Sections — sidebar pages */}
       <div className="grid gap-4 md:grid-cols-[220px_1fr]">
