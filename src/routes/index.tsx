@@ -470,8 +470,8 @@ function DashboardBody({
       {/* KPI grid — filtered by the currently selected system/page */}
       {visibleKpis.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          {visibleKpis.map((k) => (
-            <KpiCard key={k.label} {...k} previous={previous} />
+          {visibleKpis.map((k, i) => (
+            <KpiCard key={`${k.label}-${i}`} {...k} previous={previous} />
           ))}
         </div>
       )}
