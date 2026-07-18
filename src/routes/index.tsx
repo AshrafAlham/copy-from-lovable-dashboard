@@ -383,8 +383,11 @@ function DashboardBody({
   const previous = filteredData[filteredData.length - 2];
 
   const kpis = useMemo(
-    () => buildKpis(filteredData, columns),
-    [filteredData, columns]
+    () => [
+      ...buildKpis(filteredData, columns),
+      ...buildSiteKpis(filteredSite, siteColumns ?? [], train),
+    ],
+    [filteredData, columns, filteredSite, siteColumns, train]
   );
   const visibleKpis = useMemo(
     () => kpis.filter((k) => k.groups && k.groups.includes(activeGroup)),
@@ -467,8 +470,8 @@ function DashboardBody({
       {/* KPI grid — filtered by the currently selected system/page */}
       {visibleKpis.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          {visibleKpis.map((k) => (
-            <KpiCard key={k.label} {...k} previous={previous} />
+          {visibleKpis.map((k, i) => (
+            <KpiCard key={`${k.label}-${i}`} {...k} previous={previous} />
           ))}
         </div>
       )}
@@ -555,6 +558,7 @@ interface Kpi {
 function buildKpis(data: Row[], columns: string[]): Kpi[] {
   if (!data.length) return [];
   const latest = data[data.length - 1];
+  const groups = groupColumns(columns);
   const pick = (re: RegExp): string | undefined =>
     columns.find((c) => re.test(c));
 
@@ -573,6 +577,18 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
       if (typeof v === "number" && (m === null || v > m)) return v;
       return m;
     }, null);
+  const minNum = (cols: string[]) =>
+    cols.reduce<number | null>((m, c) => {
+      const v = latest[c];
+      if (typeof v === "number" && (m === null || v < m)) return v;
+      return m;
+    }, null);
+  const avgNum = (cols: string[]) => {
+    const values = cols
+      .map((c) => latest[c])
+      .filter((v): v is number => typeof v === "number");
+    return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
+  };
 
   const BEARING_TEMP_GROUPS = [
     "Turbine Bearings — Temperature",
@@ -595,6 +611,20 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
     { label: "FSR", value: getNum(latest, fsr), column: fsr ?? "", unit: "%", groups: ["Control"] },
   ].filter((k) => k.value !== null);
 
+  // Add per-group generic KPIs (max / min / average) so every system has at least 2 cards.
+  for (const [groupName, groupCols] of Object.entries(groups)) {
+    if (groupCols.length === 0) continue;
+    const max = maxNum(groupCols);
+    const min = minNum(groupCols);
+    const avg = avgNum(groupCols);
+    if (max !== null)
+      items.push({ label: "Max Value", value: max, column: "", unit: "", groups: [groupName] });
+    if (min !== null)
+      items.push({ label: "Min Value", value: min, column: "", unit: "", groups: [groupName] });
+    if (avg !== null)
+      items.push({ label: "Average Value", value: avg, column: "", unit: "", groups: [groupName] });
+  }
+
   // Tone heuristics
   return items.map((k) => {
     if (k.label === "Max Bearing T" && k.value && k.value > 85)
@@ -603,6 +633,50 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
       return { ...k, tone: k.value > 10 ? "danger" : "warning" };
     return k;
   });
+}
+
+function buildSiteKpis(data: Row[], columns: string[], train: string): Kpi[] {
+  if (!data.length || !columns.length) return [];
+  const latest = data[data.length - 1];
+  const split = splitSiteColumns(columns);
+  const groups: Record<string, string[]> = {
+    "__site_general__": split.general,
+    "__site_train__": split.byTrain[train] ?? [],
+  };
+
+  const maxNum = (cols: string[]) =>
+    cols.reduce<number | null>((m, c) => {
+      const v = latest[c];
+      if (typeof v === "number" && (m === null || v > m)) return v;
+      return m;
+    }, null);
+  const minNum = (cols: string[]) =>
+    cols.reduce<number | null>((m, c) => {
+      const v = latest[c];
+      if (typeof v === "number" && (m === null || v < m)) return v;
+      return m;
+    }, null);
+  const avgNum = (cols: string[]) => {
+    const values = cols
+      .map((c) => latest[c])
+      .filter((v): v is number => typeof v === "number");
+    return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
+  };
+
+  const items: Kpi[] = [];
+  for (const [groupKey, groupCols] of Object.entries(groups)) {
+    if (groupCols.length === 0) continue;
+    const max = maxNum(groupCols);
+    const min = minNum(groupCols);
+    const avg = avgNum(groupCols);
+    if (max !== null)
+      items.push({ label: "Max Value", value: max, column: "", unit: "", groups: [groupKey] });
+    if (min !== null)
+      items.push({ label: "Min Value", value: min, column: "", unit: "", groups: [groupKey] });
+    if (avg !== null)
+      items.push({ label: "Average Value", value: avg, column: "", unit: "", groups: [groupKey] });
+  }
+  return items;
 }
 
 
