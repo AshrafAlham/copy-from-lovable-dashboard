@@ -386,6 +386,11 @@ function DashboardBody({
     () => buildKpis(filteredData, columns),
     [filteredData, columns]
   );
+  const visibleKpis = useMemo(
+    () => kpis.filter((k) => k.groups && k.groups.includes(activeGroup)),
+    [kpis, activeGroup]
+  );
+
 
   return (
     <div className="space-y-6">
