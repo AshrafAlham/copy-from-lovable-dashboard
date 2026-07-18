@@ -855,6 +855,11 @@ function ChartPanel({
         stroke="var(--color-muted-foreground)"
         fontSize={10}
         tickMargin={4}
+        domain={[
+          (dataMin: number) => (Number.isFinite(dataMin) ? dataMin - Math.max(Math.abs(dataMin) * 0.05, 0.5) : 0),
+          (dataMax: number) => (Number.isFinite(dataMax) ? dataMax + Math.max(Math.abs(dataMax) * 0.05, 0.5) : 1),
+        ]}
+        allowDataOverflow={false}
       />
       <Tooltip
         contentStyle={{
