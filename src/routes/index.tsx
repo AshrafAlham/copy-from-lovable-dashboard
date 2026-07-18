@@ -383,8 +383,11 @@ function DashboardBody({
   const previous = filteredData[filteredData.length - 2];
 
   const kpis = useMemo(
-    () => buildKpis(filteredData, columns),
-    [filteredData, columns]
+    () => [
+      ...buildKpis(filteredData, columns),
+      ...buildSiteKpis(filteredSite, siteColumns ?? [], train),
+    ],
+    [filteredData, columns, filteredSite, siteColumns, train]
   );
   const visibleKpis = useMemo(
     () => kpis.filter((k) => k.groups && k.groups.includes(activeGroup)),
