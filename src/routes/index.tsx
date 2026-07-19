@@ -689,24 +689,48 @@ function buildOilCoolerKpi(
   if (!trainData.length || !siteData.length) return [];
   const digit = TRAIN_TAG_DIGIT[train];
   if (!digit) return [];
-  const trainLatest = trainData[trainData.length - 1];
-  const siteLatest = siteData[siteData.length - 1];
 
   const findCol = (row: Row, re: RegExp): string | undefined =>
     Object.keys(row).find((c) => re.test(c));
 
-  const inletCol = findCol(siteLatest, new RegExp(`TI-${digit}430`, "i"));
-  const outletCol = findCol(siteLatest, new RegExp(`TI-${digit}431`, "i"));
-  const ambientCol = findCol(trainLatest, new RegExp(`TE-${digit}415`, "i"));
+  // Search backwards to find the latest row that has a numeric value.
+  const latestNum = (
+    rows: Row[],
+    re: RegExp,
+  ): number | null => {
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const col = findCol(rows[i], re);
+      if (!col) continue;
+      const v = rows[i][col];
+      if (typeof v === "number" && Number.isFinite(v)) return v;
+    }
+    return null;
+  };
 
-  const inlet = getNum(siteLatest, inletCol);
-  const outlet = getNum(siteLatest, outletCol);
-  const ambient = getNum(trainLatest, ambientCol);
+  const inlet = latestNum(siteData, new RegExp(`TI-${digit}430`, "i"));
+  const outlet = latestNum(siteData, new RegExp(`TI-${digit}431`, "i"));
+  const ambient = latestNum(trainData, new RegExp(`TE-${digit}415`, "i"));
 
   if (inlet === null || outlet === null || ambient === null) return [];
   const denom = inlet - ambient;
   if (denom === 0) return [];
   const eff = ((inlet - outlet) / denom) * 100;
+
+  // Which oil cooler (A/B/C) is currently in service for this train?
+  // Site column e.g. "Turbine A Oil Cooler (Main)" holds 1/2/3 → A/B/C.
+  const trainLetter = train.replace(/^Train\s+/i, "").trim();
+  const inSvcRe = new RegExp(`Turbine\\s+${trainLetter}\\s+Oil Cooler`, "i");
+  let inSvcLabel = "";
+  for (let i = siteData.length - 1; i >= 0; i--) {
+    const col = findCol(siteData[i], inSvcRe);
+    if (!col) continue;
+    const raw = siteData[i][col];
+    const s = raw == null ? "" : String(raw).trim();
+    if (!s) continue;
+    const map: Record<string, string> = { "1": "A", "2": "B", "3": "C" };
+    inSvcLabel = map[s] ?? s.toUpperCase();
+    break;
+  }
 
   let tone: Kpi["tone"] = "default";
   if (eff < 40) tone = "danger";
@@ -714,7 +738,9 @@ function buildOilCoolerKpi(
 
   return [
     {
-      label: "Oil Cooler Effectiveness",
+      label: inSvcLabel
+        ? `Oil Cooler ${inSvcLabel} Effectiveness`
+        : "Oil Cooler Effectiveness",
       value: eff,
       column: "",
       unit: "%",
