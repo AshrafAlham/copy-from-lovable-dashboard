@@ -1562,7 +1562,18 @@ function LineCompare({
       <LineChart data={data} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
         <XAxis dataKey="t" stroke="var(--color-muted-foreground)" fontSize={11} tickMargin={6} />
-        <YAxis stroke="var(--color-muted-foreground)" fontSize={11} tickMargin={4} />
+        <YAxis
+          stroke="var(--color-muted-foreground)"
+          fontSize={11}
+          tickMargin={4}
+          domain={[
+            (dataMin: number) =>
+              Number.isFinite(dataMin) ? dataMin - Math.max(Math.abs(dataMin) * 0.05, 0.5) : 0,
+            (dataMax: number) =>
+              Number.isFinite(dataMax) ? dataMax + Math.max(Math.abs(dataMax) * 0.05, 0.5) : 1,
+          ]}
+          allowDataOverflow={false}
+        />
         <Tooltip
           contentStyle={{
             background: "var(--color-popover)",
@@ -1603,7 +1614,18 @@ function BarCompare({
       <BarChart data={trimmed} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
         <XAxis dataKey="t" stroke="var(--color-muted-foreground)" fontSize={11} tickMargin={6} />
-        <YAxis stroke="var(--color-muted-foreground)" fontSize={11} tickMargin={4} />
+        <YAxis
+          stroke="var(--color-muted-foreground)"
+          fontSize={11}
+          tickMargin={4}
+          domain={[
+            (dataMin: number) =>
+              Number.isFinite(dataMin) ? dataMin - Math.max(Math.abs(dataMin) * 0.05, 0.5) : 0,
+            (dataMax: number) =>
+              Number.isFinite(dataMax) ? dataMax + Math.max(Math.abs(dataMax) * 0.05, 0.5) : 1,
+          ]}
+          allowDataOverflow={false}
+        />
         <Tooltip
           contentStyle={{
             background: "var(--color-popover)",
