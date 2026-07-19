@@ -387,6 +387,7 @@ function DashboardBody({
     () => [
       ...buildKpis(filteredData, columns),
       ...buildSiteKpis(filteredSite, siteColumns ?? [], train),
+      ...buildOilCoolerKpi(filteredData, filteredSite, train),
     ],
     [filteredData, columns, filteredSite, siteColumns, train]
   );
