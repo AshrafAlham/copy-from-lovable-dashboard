@@ -681,6 +681,49 @@ function buildSiteKpis(data: Row[], columns: string[], train: string): Kpi[] {
   return items;
 }
 
+function buildOilCoolerKpi(
+  trainData: Row[],
+  siteData: Row[],
+  train: string,
+): Kpi[] {
+  if (!trainData.length || !siteData.length) return [];
+  const digit = TRAIN_TAG_DIGIT[train];
+  if (!digit) return [];
+  const trainLatest = trainData[trainData.length - 1];
+  const siteLatest = siteData[siteData.length - 1];
+
+  const findCol = (row: Row, re: RegExp): string | undefined =>
+    Object.keys(row).find((c) => re.test(c));
+
+  const inletCol = findCol(siteLatest, new RegExp(`TI-${digit}430`, "i"));
+  const outletCol = findCol(siteLatest, new RegExp(`TI-${digit}431`, "i"));
+  const ambientCol = findCol(trainLatest, new RegExp(`TE-${digit}415`, "i"));
+
+  const inlet = getNum(siteLatest, inletCol);
+  const outlet = getNum(siteLatest, outletCol);
+  const ambient = getNum(trainLatest, ambientCol);
+
+  if (inlet === null || outlet === null || ambient === null) return [];
+  const denom = inlet - ambient;
+  if (denom === 0) return [];
+  const eff = ((inlet - outlet) / denom) * 100;
+
+  let tone: Kpi["tone"] = "default";
+  if (eff < 40) tone = "danger";
+  else if (eff < 60) tone = "warning";
+
+  return [
+    {
+      label: "Oil Cooler Effectiveness",
+      value: eff,
+      column: "",
+      unit: "%",
+      tone,
+      groups: ["Lube Oil"],
+    },
+  ];
+}
+
 
 function getNum(row: Row | undefined, col?: string): number | null {
   if (!row || !col) return null;
