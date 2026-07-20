@@ -716,15 +716,36 @@ function buildOilCoolerKpi(
 
   const codeToLabel: Record<string, string> = { "1": "A", "2": "B", "3": "C" };
 
-  const ambient = latestNum(trainData, ambientRe);
+  // Find the train-sheet row nearest (in time) to a given site row, and pull
+  // the ambient reading from there. Falls back to the latest available.
+  const nearestAmbient = (siteRow: Row): number | null => {
+    const t = siteRow.__timestamp?.getTime();
+    if (t != null && trainData.length) {
+      let bestIdx = -1;
+      let bestDiff = Infinity;
+      for (let i = 0; i < trainData.length; i++) {
+        const tt = trainData[i].__timestamp?.getTime();
+        if (tt == null) continue;
+        const d = Math.abs(tt - t);
+        if (d < bestDiff) {
+          bestDiff = d;
+          bestIdx = i;
+        }
+      }
+      if (bestIdx >= 0) {
+        const v = numAt(trainData[bestIdx], ambientRe);
+        if (v !== null) return v;
+      }
+    }
+    return latestNum(trainData, ambientRe);
+  };
 
   // Walk site rows backwards; for each cooler A/B/C, capture the most recent
   // row where that cooler was in service AND inlet/outlet are numeric.
-  const perCooler: Record<string, { inlet: number; outlet: number } | null> = {
-    A: null,
-    B: null,
-    C: null,
-  };
+  const perCooler: Record<
+    string,
+    { inlet: number; outlet: number; ambient: number | null } | null
+  > = { A: null, B: null, C: null };
   for (let i = siteData.length - 1; i >= 0; i--) {
     const row = siteData[i];
     const svcCol = findCol(row, inSvcRe);
@@ -737,7 +758,7 @@ function buildOilCoolerKpi(
     const inlet = numAt(row, inletRe);
     const outlet = numAt(row, outletRe);
     if (inlet === null || outlet === null) continue;
-    perCooler[label] = { inlet, outlet };
+    perCooler[label] = { inlet, outlet, ambient: nearestAmbient(row) };
     if (perCooler.A && perCooler.B && perCooler.C) break;
   }
 
@@ -755,8 +776,8 @@ function buildOilCoolerKpi(
   const out: Kpi[] = [];
   for (const label of ["A", "B", "C"] as const) {
     const rec = perCooler[label];
-    if (!rec || ambient === null) continue;
-    const denom = rec.inlet - ambient;
+    if (!rec || rec.ambient === null) continue;
+    const denom = rec.inlet - rec.ambient;
     if (denom === 0) continue;
     const eff = ((rec.inlet - rec.outlet) / denom) * 100;
     let tone: Kpi["tone"] = "default";
@@ -773,6 +794,7 @@ function buildOilCoolerKpi(
   }
   return out;
 }
+
 
 
 function getNum(row: Row | undefined, col?: string): number | null {
