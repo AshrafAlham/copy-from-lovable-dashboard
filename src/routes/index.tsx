@@ -693,61 +693,85 @@ function buildOilCoolerKpi(
   const findCol = (row: Row, re: RegExp): string | undefined =>
     Object.keys(row).find((c) => re.test(c));
 
-  // Search backwards to find the latest row that has a numeric value.
-  const latestNum = (
-    rows: Row[],
-    re: RegExp,
-  ): number | null => {
+  const numAt = (row: Row | undefined, re: RegExp): number | null => {
+    if (!row) return null;
+    const col = findCol(row, re);
+    if (!col) return null;
+    const v = row[col];
+    return typeof v === "number" && Number.isFinite(v) ? v : null;
+  };
+  const latestNum = (rows: Row[], re: RegExp): number | null => {
     for (let i = rows.length - 1; i >= 0; i--) {
-      const col = findCol(rows[i], re);
-      if (!col) continue;
-      const v = rows[i][col];
-      if (typeof v === "number" && Number.isFinite(v)) return v;
+      const v = numAt(rows[i], re);
+      if (v !== null) return v;
     }
     return null;
   };
 
-  const inlet = latestNum(siteData, new RegExp(`TI-${digit}430`, "i"));
-  const outlet = latestNum(siteData, new RegExp(`TI-${digit}431`, "i"));
-  const ambient = latestNum(trainData, new RegExp(`TE-${digit}415`, "i"));
-
-  if (inlet === null || outlet === null || ambient === null) return [];
-  const denom = inlet - ambient;
-  if (denom === 0) return [];
-  const eff = ((inlet - outlet) / denom) * 100;
-
-  // Which oil cooler (A/B/C) is currently in service for this train?
-  // Site column e.g. "Turbine A Oil Cooler (Main)" holds 1/2/3 → A/B/C.
+  const inletRe = new RegExp(`TI-${digit}430`, "i");
+  const outletRe = new RegExp(`TI-${digit}431`, "i");
+  const ambientRe = new RegExp(`TE-${digit}415`, "i");
   const trainLetter = train.replace(/^Train\s+/i, "").trim();
   const inSvcRe = new RegExp(`Turbine\\s+${trainLetter}\\s+Oil Cooler`, "i");
-  let inSvcLabel = "";
+
+  const codeToLabel: Record<string, string> = { "1": "A", "2": "B", "3": "C" };
+
+  const ambient = latestNum(trainData, ambientRe);
+
+  // Walk site rows backwards; for each cooler A/B/C, capture the most recent
+  // row where that cooler was in service AND inlet/outlet are numeric.
+  const perCooler: Record<string, { inlet: number; outlet: number } | null> = {
+    A: null,
+    B: null,
+    C: null,
+  };
+  for (let i = siteData.length - 1; i >= 0; i--) {
+    const row = siteData[i];
+    const svcCol = findCol(row, inSvcRe);
+    if (!svcCol) continue;
+    const raw = row[svcCol];
+    const s = raw == null ? "" : String(raw).trim();
+    const label = codeToLabel[s] ?? (s ? s.toUpperCase() : "");
+    if (!label || !(label in perCooler)) continue;
+    if (perCooler[label]) continue;
+    const inlet = numAt(row, inletRe);
+    const outlet = numAt(row, outletRe);
+    if (inlet === null || outlet === null) continue;
+    perCooler[label] = { inlet, outlet };
+    if (perCooler.A && perCooler.B && perCooler.C) break;
+  }
+
+  let currentSvc = "";
   for (let i = siteData.length - 1; i >= 0; i--) {
     const col = findCol(siteData[i], inSvcRe);
     if (!col) continue;
     const raw = siteData[i][col];
     const s = raw == null ? "" : String(raw).trim();
     if (!s) continue;
-    const map: Record<string, string> = { "1": "A", "2": "B", "3": "C" };
-    inSvcLabel = map[s] ?? s.toUpperCase();
+    currentSvc = codeToLabel[s] ?? s.toUpperCase();
     break;
   }
 
-  let tone: Kpi["tone"] = "default";
-  if (eff < 40) tone = "danger";
-  else if (eff < 60) tone = "warning";
-
-  return [
-    {
-      label: inSvcLabel
-        ? `Oil Cooler ${inSvcLabel} Effectiveness`
-        : "Oil Cooler Effectiveness",
+  const out: Kpi[] = [];
+  for (const label of ["A", "B", "C"] as const) {
+    const rec = perCooler[label];
+    if (!rec || ambient === null) continue;
+    const denom = rec.inlet - ambient;
+    if (denom === 0) continue;
+    const eff = ((rec.inlet - rec.outlet) / denom) * 100;
+    let tone: Kpi["tone"] = "default";
+    if (eff < 40) tone = "danger";
+    else if (eff < 60) tone = "warning";
+    out.push({
+      label: `Oil Cooler ${label} Effectiveness${currentSvc === label ? " (in service)" : ""}`,
       value: eff,
       column: "",
       unit: "%",
       tone,
       groups: ["Lube Oil"],
-    },
-  ];
+    });
+  }
+  return out;
 }
 
 
