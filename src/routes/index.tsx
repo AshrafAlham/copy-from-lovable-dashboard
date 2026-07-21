@@ -1445,16 +1445,17 @@ function CompareView({
   // Time-series merged data
   const chartData = useMemo(() => {
     if (series.length === 0) return [];
-    const map = new Map<string, Record<string, string | number | null>>();
+    const map = new Map<number, Record<string, string | number | null>>();
     for (const q of loaded) {
       if (!activeTrains.includes(q.train)) continue;
       for (const row of q.data!.rows) {
         if (!row.__timestamp) continue;
+        const ts = row.__timestamp.getTime();
         const key = format(row.__timestamp, "MM/dd HH:mm");
-        let entry = map.get(key);
+        let entry = map.get(ts);
         if (!entry) {
-          entry = { t: key };
-          map.set(key, entry);
+          entry = { __ts: ts, t: key };
+          map.set(ts, entry);
         }
         for (const s of effectiveSensors) {
           const v = row[s];
@@ -1462,10 +1463,11 @@ function CompareView({
         }
       }
     }
-    return Array.from(map.values()).sort((a, b) =>
-      String(a.t).localeCompare(String(b.t))
+    return Array.from(map.values()).sort(
+      (a, b) => (a.__ts as number) - (b.__ts as number)
     );
   }, [loaded, series, effectiveSensors, activeTrains]);
+
 
   // Latest reading per series (used by bar/pie)
   const latestPerSeries = useMemo(() => {
