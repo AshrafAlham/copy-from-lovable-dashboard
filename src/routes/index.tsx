@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { Fragment, useMemo, useState } from "react";
 import {
@@ -193,6 +193,9 @@ function Dashboard() {
                     : ""
                 }`}
               />
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link to="/station-overview">Station Overview</Link>
             </Button>
           </div>
         </div>
