@@ -197,6 +197,9 @@ function Dashboard() {
             <Button asChild variant="outline" size="sm">
               <Link to="/station-overview">Station Overview</Link>
             </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link to="/performance-map">Performance Map</Link>
+            </Button>
           </div>
         </div>
       </header>
