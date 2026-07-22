@@ -299,7 +299,7 @@ function PerformanceMap() {
                       border: "1px solid hsl(var(--border))",
                       borderRadius: 8,
                     }}
-                    formatter={(v: number) => (typeof v === "number" ? v.toFixed(2) : v)}
+                    formatter={(v) => (typeof v === "number" ? v.toFixed(2) : String(v))}
                   />
                   <Legend />
                   {curves.map((c) =>
