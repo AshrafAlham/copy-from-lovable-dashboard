@@ -563,6 +563,37 @@ interface Kpi {
   groups?: string[];
 }
 
+// Isentropic efficiency of an axial air compressor from the latest row.
+// η = ((P2/P1)^((k-1)/k) − 1) / (T2/T1 − 1), with pressures absolute and T in Kelvin.
+// PT tags on the sheet are gauge (barg), TE tags are °C.
+function computeAxialIsentropicEff(latest: Row | undefined, columns: string[]): number | null {
+  if (!latest) return null;
+  const P_ATM = 1.01325;
+  const K = 1.4;
+  const exp = (K - 1) / K;
+  const avg = (cols: string[]): number | null => {
+    const vs = cols.map((c) => latest[c]).filter((v): v is number => typeof v === "number");
+    return vs.length ? vs.reduce((a, b) => a + b, 0) / vs.length : null;
+  };
+  const suctionT = columns.filter((c) => /air temp\..*axial compressor suction/i.test(c));
+  const suctionP = columns.filter((c) => /air press\..*axial compressor suction/i.test(c));
+  const dischargeP = columns.filter((c) => /air press\..*axial compressor discharge/i.test(c));
+  const dischargeT = columns.filter((c) => /air temp\..*axial compressor discharge/i.test(c));
+  const t1C = avg(suctionT);
+  const p1g = avg(suctionP);
+  const p2g = avg(dischargeP);
+  const t2C = avg(dischargeT);
+  if (t1C === null || p1g === null || p2g === null || t2C === null) return null;
+  const T1 = t1C + 273.15;
+  const T2 = t2C + 273.15;
+  const P1 = p1g + P_ATM;
+  const P2 = p2g + P_ATM;
+  if (T1 <= 0 || P1 <= 0 || P2 <= P1 || T2 <= T1) return null;
+  const eff = (Math.pow(P2 / P1, exp) - 1) / (T2 / T1 - 1);
+  if (!Number.isFinite(eff)) return null;
+  return eff * 100;
+}
+
 function buildKpis(data: Row[], columns: string[]): Kpi[] {
   if (!data.length) return [];
   const latest = data[data.length - 1];
@@ -620,8 +651,10 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
   ].filter((k) => k.value !== null);
 
   // Add per-group generic KPIs (max / min / average) so every system has at least 2 cards.
+  // Skip Axial Compressor — a dedicated Isentropic Efficiency card is added separately.
   for (const [groupName, groupCols] of Object.entries(groups)) {
     if (groupCols.length === 0) continue;
+    if (groupName === "Axial Compressor (Air)") continue;
     const max = maxNum(groupCols);
     const min = minNum(groupCols);
     const avg = avgNum(groupCols);
@@ -631,6 +664,22 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
       items.push({ label: "Min Value", value: min, column: "", unit: "", groups: [groupName] });
     if (avg !== null)
       items.push({ label: "Average Value", value: avg, column: "", unit: "", groups: [groupName] });
+  }
+
+  // Isentropic efficiency of the axial (air) compressor
+  const eff = computeAxialIsentropicEff(latest, columns);
+  if (eff !== null) {
+    let tone: Kpi["tone"] = "default";
+    if (eff < 70) tone = "warning";
+    if (eff < 60) tone = "danger";
+    items.push({
+      label: "Isentropic Efficiency",
+      value: eff,
+      column: "",
+      unit: "%",
+      tone,
+      groups: ["Axial Compressor (Air)"],
+    });
   }
 
   // Tone heuristics
