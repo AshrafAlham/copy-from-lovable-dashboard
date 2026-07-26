@@ -620,8 +620,10 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
   ].filter((k) => k.value !== null);
 
   // Add per-group generic KPIs (max / min / average) so every system has at least 2 cards.
+  // Skip Axial Compressor — a dedicated Isentropic Efficiency card is added separately.
   for (const [groupName, groupCols] of Object.entries(groups)) {
     if (groupCols.length === 0) continue;
+    if (groupName === "Axial Compressor (Air)") continue;
     const max = maxNum(groupCols);
     const min = minNum(groupCols);
     const avg = avgNum(groupCols);
@@ -631,6 +633,22 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
       items.push({ label: "Min Value", value: min, column: "", unit: "", groups: [groupName] });
     if (avg !== null)
       items.push({ label: "Average Value", value: avg, column: "", unit: "", groups: [groupName] });
+  }
+
+  // Isentropic efficiency of the axial (air) compressor
+  const eff = computeAxialIsentropicEff(latest, columns);
+  if (eff !== null) {
+    let tone: Kpi["tone"] = "default";
+    if (eff < 70) tone = "warning";
+    if (eff < 60) tone = "danger";
+    items.push({
+      label: "Isentropic Efficiency",
+      value: eff,
+      column: "",
+      unit: "%",
+      tone,
+      groups: ["Axial Compressor (Air)"],
+    });
   }
 
   // Tone heuristics
