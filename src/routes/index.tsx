@@ -564,13 +564,13 @@ interface Kpi {
 }
 
 // Isentropic efficiency of an axial air compressor from the latest row.
-// η = ((P2/P1)^((k-1)/k) − 1) / (T2/T1 − 1), with pressures absolute and T in Kelvin.
-// PT tags on the sheet are gauge (barg), TE tags are °C.
+// User equation: ηc = T1 * [(P2/P1)^((γ−1)/γ) − 1] / (T2 − T1)
+// Pressures are converted to absolute (barg + 1.01325) and temperatures to Kelvin.
 function computeAxialIsentropicEff(latest: Row | undefined, columns: string[]): number | null {
   if (!latest) return null;
   const P_ATM = 1.01325;
-  const K = 1.4;
-  const exp = (K - 1) / K;
+  const gamma = 1.4;
+  const exp = (gamma - 1) / gamma;
   const avg = (cols: string[]): number | null => {
     const vs = cols.map((c) => latest[c]).filter((v): v is number => typeof v === "number");
     return vs.length ? vs.reduce((a, b) => a + b, 0) / vs.length : null;
@@ -589,7 +589,7 @@ function computeAxialIsentropicEff(latest: Row | undefined, columns: string[]): 
   const P1 = p1g + P_ATM;
   const P2 = p2g + P_ATM;
   if (T1 <= 0 || P1 <= 0 || P2 <= P1 || T2 <= T1) return null;
-  const eff = (Math.pow(P2 / P1, exp) - 1) / (T2 / T1 - 1);
+  const eff = (T1 * (Math.pow(P2 / P1, exp) - 1)) / (T2 - T1);
   if (!Number.isFinite(eff)) return null;
   return eff * 100;
 }
