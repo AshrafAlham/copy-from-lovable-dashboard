@@ -566,13 +566,12 @@ interface Kpi {
 // Isentropic efficiency of an axial air compressor from the latest row.
 // User equation: ηc = T1 * [(P2/P1)^((γ−1)/γ) − 1] / (T2 − T1)
 // Pressures are converted to absolute (barg + 1.01325) and temperatures to Kelvin.
-function computeAxialIsentropicEff(latest: Row | undefined, columns: string[]): number | null {
-  if (!latest) return null;
+function axialEffForRow(row: Row, columns: string[]): number | null {
   const P_ATM = 1.01325;
   const gamma = 1.4;
   const exp = (gamma - 1) / gamma;
   const avg = (cols: string[]): number | null => {
-    const vs = cols.map((c) => latest[c]).filter((v): v is number => typeof v === "number");
+    const vs = cols.map((c) => row[c]).filter((v): v is number => typeof v === "number");
     return vs.length ? vs.reduce((a, b) => a + b, 0) / vs.length : null;
   };
   const suctionT = columns.filter((c) => /air temp\..*axial compressor suction/i.test(c));
@@ -580,19 +579,31 @@ function computeAxialIsentropicEff(latest: Row | undefined, columns: string[]): 
   const dischargeP = columns.filter((c) => /air press\..*axial compressor discharge/i.test(c));
   const dischargeT = columns.filter((c) => /air temp\..*axial compressor discharge/i.test(c));
   const t1C = avg(suctionT);
-  const p1g = avg(suctionP);
+  const p1r = avg(suctionP);
   const p2g = avg(dischargeP);
   const t2C = avg(dischargeT);
-  if (t1C === null || p1g === null || p2g === null || t2C === null) return null;
+  if (t1C === null || p1r === null || p2g === null || t2C === null) return null;
   const T1 = t1C + 273.15;
   const T2 = t2C + 273.15;
-  const P1 = p1g + P_ATM;
+  // Axial compressor suction sits at ~ambient: a reading near/below 1 bar is
+  // already absolute (barometric), so don't add atmosphere to it again.
+  const P1 = p1r <= 1.5 ? p1r : p1r + P_ATM;
   const P2 = p2g + P_ATM;
   if (T1 <= 0 || P1 <= 0 || P2 <= P1 || T2 <= T1) return null;
   const eff = (T1 * (Math.pow(P2 / P1, exp) - 1)) / (T2 - T1);
-  if (!Number.isFinite(eff)) return null;
+  if (!Number.isFinite(eff) || eff <= 0 || eff > 1.5) return null;
   return eff * 100;
 }
+
+// Average isentropic efficiency across every row in the selected time range.
+function computeAxialIsentropicEff(data: Row[], columns: string[]): number | null {
+  const vals = data
+    .map((r) => axialEffForRow(r, columns))
+    .filter((v): v is number => v !== null);
+  if (!vals.length) return null;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
 
 function buildKpis(data: Row[], columns: string[]): Kpi[] {
   if (!data.length) return [];
