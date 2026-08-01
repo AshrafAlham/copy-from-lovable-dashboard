@@ -599,7 +599,7 @@ function axialEffForRow(row: Row, columns: string[]): number | null {
   const P2 = p2g + P_ATM;
   if (T1 <= 0 || P1 <= 0 || P2 <= P1 || T2 <= T1) return null;
   const eff = (T1 * (Math.pow(P2 / P1, exp) - 1)) / (T2 - T1);
-  if (!Number.isFinite(eff) || eff <= 0 || eff > 1.5) return null;
+  if (!Number.isFinite(eff) || eff <= 0 || eff > 1.05) return null;
   return eff * 100;
 }
 
