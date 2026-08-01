@@ -574,10 +574,18 @@ function axialEffForRow(row: Row, columns: string[]): number | null {
     const vs = cols.map((c) => row[c]).filter((v): v is number => typeof v === "number");
     return vs.length ? vs.reduce((a, b) => a + b, 0) / vs.length : null;
   };
-  const suctionT = columns.filter((c) => /air temp\..*axial compressor suction/i.test(c));
-  const suctionP = columns.filter((c) => /air press\..*axial compressor suction/i.test(c));
-  const dischargeP = columns.filter((c) => /air press\..*axial compressor discharge/i.test(c));
-  const dischargeT = columns.filter((c) => /air temp\..*axial compressor discharge/i.test(c));
+  // Some sheets mislabel a pressure column as "Air Temp." (e.g.
+  // "Air Temp. at Axial Compressor Discharge (PT-2203B)"), so classify by the
+  // instrument tag (PT/PI/PDI = pressure, TE/TI/TC = temperature) and fall back
+  // to the wording only when there is no tag.
+  const isPressure = (c: string) => /\(\s*P[A-Z]*-/i.test(c) || (!/\([A-Z]+-/i.test(c) && /press/i.test(c));
+  const isTemp = (c: string) => /\(\s*T[A-Z]*-/i.test(c) || (!/\([A-Z]+-/i.test(c) && /temp/i.test(c));
+  const atSuction = (c: string) => /axial compressor suction/i.test(c);
+  const atDischarge = (c: string) => /axial compressor discharge/i.test(c);
+  const suctionT = columns.filter((c) => atSuction(c) && isTemp(c));
+  const suctionP = columns.filter((c) => atSuction(c) && isPressure(c));
+  const dischargeP = columns.filter((c) => atDischarge(c) && isPressure(c));
+  const dischargeT = columns.filter((c) => atDischarge(c) && isTemp(c));
   const t1C = avg(suctionT);
   const p1r = avg(suctionP);
   const p2g = avg(dischargeP);
