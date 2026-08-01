@@ -621,23 +621,27 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
   // Max bearing temp & max vibration across all sensors
   const tempCols = columns.filter((c) => /bearing.*temp/i.test(c));
   const vibCols = columns.filter((c) => /vibration/i.test(c));
-  const maxNum = (cols: string[]) =>
-    cols.reduce<number | null>((m, c) => {
-      const v = latest[c];
-      if (typeof v === "number" && (m === null || v > m)) return v;
-      return m;
-    }, null);
-  const minNum = (cols: string[]) =>
-    cols.reduce<number | null>((m, c) => {
-      const v = latest[c];
-      if (typeof v === "number" && (m === null || v < m)) return v;
-      return m;
-    }, null);
+  // Aggregate over EVERY row in the selected time range (not just the latest).
+  const rangeValues = (cols: string[]): number[] => {
+    const out: number[] = [];
+    for (const row of data)
+      for (const c of cols) {
+        const v = row[c];
+        if (typeof v === "number" && Number.isFinite(v)) out.push(v);
+      }
+    return out;
+  };
+  const maxNum = (cols: string[]) => {
+    const v = rangeValues(cols);
+    return v.length ? Math.max(...v) : null;
+  };
+  const minNum = (cols: string[]) => {
+    const v = rangeValues(cols);
+    return v.length ? Math.min(...v) : null;
+  };
   const avgNum = (cols: string[]) => {
-    const values = cols
-      .map((c) => latest[c])
-      .filter((v): v is number => typeof v === "number");
-    return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
+    const v = rangeValues(cols);
+    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
   };
 
   const BEARING_TEMP_GROUPS = [
@@ -678,7 +682,7 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
   }
 
   // Isentropic efficiency of the axial (air) compressor
-  const eff = computeAxialIsentropicEff(latest, columns);
+  const eff = computeAxialIsentropicEff(data, columns);
   if (eff !== null) {
     let tone: Kpi["tone"] = "default";
     if (eff < 70) tone = "warning";
@@ -712,23 +716,27 @@ function buildSiteKpis(data: Row[], columns: string[], train: string): Kpi[] {
     "__site_train__": split.byTrain[train] ?? [],
   };
 
-  const maxNum = (cols: string[]) =>
-    cols.reduce<number | null>((m, c) => {
-      const v = latest[c];
-      if (typeof v === "number" && (m === null || v > m)) return v;
-      return m;
-    }, null);
-  const minNum = (cols: string[]) =>
-    cols.reduce<number | null>((m, c) => {
-      const v = latest[c];
-      if (typeof v === "number" && (m === null || v < m)) return v;
-      return m;
-    }, null);
+  // Aggregate over EVERY row in the selected time range (not just the latest).
+  const rangeValues = (cols: string[]): number[] => {
+    const out: number[] = [];
+    for (const row of data)
+      for (const c of cols) {
+        const v = row[c];
+        if (typeof v === "number" && Number.isFinite(v)) out.push(v);
+      }
+    return out;
+  };
+  const maxNum = (cols: string[]) => {
+    const v = rangeValues(cols);
+    return v.length ? Math.max(...v) : null;
+  };
+  const minNum = (cols: string[]) => {
+    const v = rangeValues(cols);
+    return v.length ? Math.min(...v) : null;
+  };
   const avgNum = (cols: string[]) => {
-    const values = cols
-      .map((c) => latest[c])
-      .filter((v): v is number => typeof v === "number");
-    return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
+    const v = rangeValues(cols);
+    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
   };
 
   const items: Kpi[] = [];
