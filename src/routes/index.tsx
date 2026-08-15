@@ -217,6 +217,15 @@ function Dashboard() {
                 }`}
               />
             </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              title="Isentropic efficiency trend"
+              aria-label="Isentropic efficiency trend"
+              onClick={() => setEffOpen(true)}
+            >
+              <TrendingUp className="size-4" />
+            </Button>
             <Button asChild variant="outline" size="sm">
               <Link to="/station-overview">Station Overview</Link>
             </Button>
