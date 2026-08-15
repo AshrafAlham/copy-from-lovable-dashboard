@@ -269,6 +269,7 @@ function Dashboard() {
         )}
 
       </main>
+      <EffTrendDialog open={effOpen} onOpenChange={setEffOpen} series={effSeries} />
     </div>
   );
 }
