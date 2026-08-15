@@ -99,6 +99,7 @@ const ONE_DAY = 24 * 60 * 60 * 1000;
 function Dashboard() {
   const trainNames = Object.keys(TRAIN_SHEETS);
   const [mode, setMode] = useState<"single" | "compare">("single");
+  const [effOpen, setEffOpen] = useState(false);
   const [train, setTrain] = useState(trainNames[0]);
   const url = TRAIN_SHEETS[train];
 
