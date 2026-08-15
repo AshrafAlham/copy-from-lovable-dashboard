@@ -122,17 +122,31 @@ function Dashboard() {
     refetchOnWindowFocus: false,
   });
 
-  // For compare mode: fetch all trains in parallel
+  // For compare mode (and the efficiency trend): fetch all trains in parallel
   const compareQueries = useQueries({
     queries: trainNames.map((t) => ({
       queryKey: ["sheet", t, TRAIN_SHEETS[t]],
       queryFn: () => fetchSheet(TRAIN_SHEETS[t]),
-      enabled: !!TRAIN_SHEETS[t] && mode === "compare",
+      enabled: !!TRAIN_SHEETS[t] && (mode === "compare" || effOpen),
       refetchInterval: () => msUntilNext11AM(),
       staleTime: ONE_DAY,
       refetchOnWindowFocus: false,
     })),
   });
+
+  // Isentropic efficiency trend series: current train in single mode, all trains in compare mode.
+  const effSeries = useMemo(() => {
+    if (mode === "single")
+      return query.data
+        ? [{ train, points: axialEffSeries(query.data.rows, query.data.columns) }]
+        : [];
+    return compareQueries.map((q, i) => ({
+      train: trainNames[i],
+      points: q.data ? axialEffSeries(q.data.rows, q.data.columns) : [],
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, train, query.data, compareQueries.map((q) => q.data).join?.length, ...compareQueries.map((q) => q.data)]);
+
 
 
 
