@@ -568,7 +568,7 @@ interface Kpi {
 // Pressures are converted to absolute (barg + 1.01325) and temperatures to Kelvin.
 function axialEffForRow(row: Row, columns: string[]): number | null {
   const P_ATM = 1.01325;
-  const gamma = 1.4;
+  const gamma = 1.2857;
   const exp = (gamma - 1) / gamma;
   const avg = (cols: string[]): number | null => {
     const vs = cols.map((c) => row[c]).filter((v): v is number => typeof v === "number");
