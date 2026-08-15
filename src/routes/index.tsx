@@ -51,7 +51,14 @@ import {
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Activity, AlertTriangle, RefreshCw, Gauge, Plus, X, LayoutGrid, Columns2, Rows } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Activity, AlertTriangle, RefreshCw, Gauge, Plus, X, LayoutGrid, Columns2, Rows, TrendingUp } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -92,6 +99,7 @@ const ONE_DAY = 24 * 60 * 60 * 1000;
 function Dashboard() {
   const trainNames = Object.keys(TRAIN_SHEETS);
   const [mode, setMode] = useState<"single" | "compare">("single");
+  const [effOpen, setEffOpen] = useState(false);
   const [train, setTrain] = useState(trainNames[0]);
   const url = TRAIN_SHEETS[train];
 
@@ -114,17 +122,32 @@ function Dashboard() {
     refetchOnWindowFocus: false,
   });
 
-  // For compare mode: fetch all trains in parallel
+  // For compare mode (and the efficiency trend): fetch all trains in parallel
   const compareQueries = useQueries({
     queries: trainNames.map((t) => ({
       queryKey: ["sheet", t, TRAIN_SHEETS[t]],
       queryFn: () => fetchSheet(TRAIN_SHEETS[t]),
-      enabled: !!TRAIN_SHEETS[t] && mode === "compare",
+      enabled: !!TRAIN_SHEETS[t] && (mode === "compare" || effOpen),
       refetchInterval: () => msUntilNext11AM(),
       staleTime: ONE_DAY,
       refetchOnWindowFocus: false,
     })),
   });
+
+  // Isentropic efficiency trend series: current train in single mode, all trains in compare mode.
+  const compareData = compareQueries.map((q) => q.data);
+  const effSeries = useMemo(() => {
+    if (mode === "single")
+      return query.data
+        ? [{ train, points: axialEffSeries(query.data.rows, query.data.columns) }]
+        : [];
+    return compareData.map((d, i) => ({
+      train: trainNames[i],
+      points: d ? axialEffSeries(d.rows, d.columns) : [],
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, train, query.data, ...compareData]);
+
 
 
 
@@ -194,6 +217,15 @@ function Dashboard() {
                 }`}
               />
             </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              title="Isentropic efficiency trend"
+              aria-label="Isentropic efficiency trend"
+              onClick={() => setEffOpen(true)}
+            >
+              <TrendingUp className="size-4" />
+            </Button>
             <Button asChild variant="outline" size="sm">
               <Link to="/station-overview">Station Overview</Link>
             </Button>
@@ -237,6 +269,7 @@ function Dashboard() {
         )}
 
       </main>
+      <EffTrendDialog open={effOpen} onOpenChange={setEffOpen} series={effSeries} />
     </div>
   );
 }
@@ -568,7 +601,7 @@ interface Kpi {
 // Pressures are converted to absolute (barg + 1.01325) and temperatures to Kelvin.
 function axialEffForRow(row: Row, columns: string[]): number | null {
   const P_ATM = 1.01325;
-  const gamma = 1.4;
+  const gamma = 1.2857;
   const exp = (gamma - 1) / gamma;
   const avg = (cols: string[]): number | null => {
     const vs = cols.map((c) => row[c]).filter((v): v is number => typeof v === "number");
@@ -611,6 +644,115 @@ function computeAxialIsentropicEff(data: Row[], columns: string[]): number | nul
   if (!vals.length) return null;
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
+
+// Time-series of isentropic efficiency for one train.
+export function axialEffSeries(
+  data: Row[],
+  columns: string[],
+): { ts: number; eff: number }[] {
+  const out: { ts: number; eff: number }[] = [];
+  for (const r of data) {
+    const eff = axialEffForRow(r, columns);
+    const ts = r.__timestamp?.getTime();
+    if (eff !== null && ts) out.push({ ts, eff });
+  }
+  return out.sort((a, b) => a.ts - b.ts);
+}
+
+function EffTrendChart({
+  series,
+}: {
+  series: { train: string; points: { ts: number; eff: number }[] }[];
+}) {
+  const { data, keys } = useMemo(() => {
+    const byTs = new Map<number, Record<string, number | string>>();
+    for (const s of series)
+      for (const p of s.points) {
+        const row = byTs.get(p.ts) ?? { __ts: p.ts, time: format(new Date(p.ts), "MM/dd HH:mm") };
+        row[s.train] = Number(p.eff.toFixed(2));
+        byTs.set(p.ts, row);
+      }
+    const rows = [...byTs.values()].sort((a, b) => (a.__ts as number) - (b.__ts as number));
+    return { data: rows, keys: series.filter((s) => s.points.length).map((s) => s.train) };
+  }, [series]);
+
+  if (!data.length)
+    return (
+      <p className="text-sm text-muted-foreground py-10 text-center">
+        No isentropic efficiency data available for the selected train(s).
+      </p>
+    );
+
+  return (
+    <div className="h-[420px]">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+          <XAxis dataKey="time" tick={{ fontSize: 10 }} minTickGap={24} />
+          <YAxis
+            tick={{ fontSize: 10 }}
+            unit="%"
+            domain={[
+              (min: number) => Math.max(0, min - Math.max(0.5, Math.abs(min) * 0.05)),
+              (max: number) => max + Math.max(0.5, Math.abs(max) * 0.05),
+            ]}
+            allowDataOverflow={false}
+          />
+          <Tooltip
+            contentStyle={{
+              background: "var(--color-card)",
+              border: "1px solid var(--color-border)",
+              borderRadius: 8,
+              fontSize: 12,
+            }}
+            formatter={(v) => `${v}%`}
+          />
+          <Legend wrapperStyle={{ fontSize: 11 }} />
+          {keys.map((k, i) => (
+            <Line
+              key={k}
+              type="monotone"
+              dataKey={k}
+              stroke={CHART_COLORS[i % CHART_COLORS.length]}
+              strokeWidth={2}
+              dot={{ r: 2 }}
+              connectNulls
+            />
+          ))}
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function EffTrendDialog({
+  open,
+  onOpenChange,
+  series,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  series: { train: string; points: { ts: number; eff: number }[] }[];
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-5xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <TrendingUp className="size-4 text-primary" />
+            Axial Compressor Isentropic Efficiency — Trend
+          </DialogTitle>
+          <DialogDescription className="font-mono text-xs">
+            ηc = T₁·[(P₂/P₁)^((γ−1)/γ) − 1] / (T₂ − T₁) · γ = 1.2857 · T in Kelvin
+          </DialogDescription>
+        </DialogHeader>
+        <EffTrendChart series={series} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
 
 
 function buildKpis(data: Row[], columns: string[]): Kpi[] {
