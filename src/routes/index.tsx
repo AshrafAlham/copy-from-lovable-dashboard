@@ -679,7 +679,7 @@ function EffTrendChart({
               borderRadius: 8,
               fontSize: 12,
             }}
-            formatter={(v: number) => `${v}%`}
+            formatter={(v) => `${v}%`}
           />
           <Legend wrapperStyle={{ fontSize: 11 }} />
           {keys.map((k, i) => (
