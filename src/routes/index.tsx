@@ -135,17 +135,18 @@ function Dashboard() {
   });
 
   // Isentropic efficiency trend series: current train in single mode, all trains in compare mode.
+  const compareData = compareQueries.map((q) => q.data);
   const effSeries = useMemo(() => {
     if (mode === "single")
       return query.data
         ? [{ train, points: axialEffSeries(query.data.rows, query.data.columns) }]
         : [];
-    return compareQueries.map((q, i) => ({
+    return compareData.map((d, i) => ({
       train: trainNames[i],
-      points: q.data ? axialEffSeries(q.data.rows, q.data.columns) : [],
+      points: d ? axialEffSeries(d.rows, d.columns) : [],
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, train, query.data, compareQueries.map((q) => q.data).join?.length, ...compareQueries.map((q) => q.data)]);
+  }, [mode, train, query.data, ...compareData]);
 
 
 
