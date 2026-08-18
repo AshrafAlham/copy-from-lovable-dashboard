@@ -97,7 +97,6 @@ const ONE_DAY = 24 * 60 * 60 * 1000;
 function Dashboard() {
   const trainNames = Object.keys(TRAIN_SHEETS);
   const [mode, setMode] = useState<"single" | "compare">("single");
-  const [effOpen, setEffOpen] = useState(false);
   const [train, setTrain] = useState(trainNames[0]);
   const url = TRAIN_SHEETS[train];
 
@@ -125,26 +124,13 @@ function Dashboard() {
     queries: trainNames.map((t) => ({
       queryKey: ["sheet", t, TRAIN_SHEETS[t]],
       queryFn: () => fetchSheet(TRAIN_SHEETS[t]),
-      enabled: !!TRAIN_SHEETS[t] && (mode === "compare" || effOpen),
+      enabled: !!TRAIN_SHEETS[t] && mode === "compare",
       refetchInterval: () => msUntilNext11AM(),
       staleTime: ONE_DAY,
       refetchOnWindowFocus: false,
     })),
   });
 
-  // Isentropic efficiency trend series: current train in single mode, all trains in compare mode.
-  const compareData = compareQueries.map((q) => q.data);
-  const effSeries = useMemo(() => {
-    if (mode === "single")
-      return query.data
-        ? [{ train, points: axialEffSeries(query.data.rows, query.data.columns) }]
-        : [];
-    return compareData.map((d, i) => ({
-      train: trainNames[i],
-      points: d ? axialEffSeries(d.rows, d.columns) : [],
-    }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, train, query.data, ...compareData]);
 
 
 
@@ -215,15 +201,6 @@ function Dashboard() {
                 }`}
               />
             </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              title="Isentropic efficiency trend"
-              aria-label="Isentropic efficiency trend"
-              onClick={() => setEffOpen(true)}
-            >
-              <TrendingUp className="size-4" />
-            </Button>
             <Button asChild variant="outline" size="sm">
               <Link to="/station-overview">Station Overview</Link>
             </Button>
@@ -267,7 +244,6 @@ function Dashboard() {
         )}
 
       </main>
-      <EffTrendDialog open={effOpen} onOpenChange={setEffOpen} series={effSeries} />
     </div>
   );
 }
