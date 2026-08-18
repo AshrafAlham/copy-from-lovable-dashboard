@@ -829,21 +829,9 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
       items.push({ label: "Average Value", value: avg, column: "", unit: "", groups: [groupName] });
   }
 
-  // Isentropic efficiency of the axial (air) compressor
-  const eff = computeAxialIsentropicEff(data, columns);
-  if (eff !== null) {
-    let tone: Kpi["tone"] = "default";
-    if (eff < 70) tone = "warning";
-    if (eff < 60) tone = "danger";
-    items.push({
-      label: "Isentropic Efficiency",
-      value: eff,
-      column: "",
-      unit: "%",
-      tone,
-      groups: ["Axial Compressor (Air)"],
-    });
-  }
+  // Axial Compressor efficiency is shown as a trend chart (icon on that page),
+  // not as a KPI card.
+
 
   // Tone heuristics
   return items.map((k) => {
