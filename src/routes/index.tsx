@@ -598,10 +598,10 @@ interface Kpi {
 
 // Isentropic efficiency of an axial air compressor from the latest row.
 // User equation: ηc = T1 * [(P2/P1)^((γ−1)/γ) − 1] / (T2 − T1)
-// Pressures are converted to absolute (barg + 1.01325) and temperatures to Kelvin.
+// P1 is recorded ABSOLUTE (barometric), P2 is GAUGE → convert P2 only.
 function axialEffForRow(row: Row, columns: string[]): number | null {
   const P_ATM = 1.01325;
-  const gamma = 1.2857;
+  const gamma = 1.4;
   const exp = (gamma - 1) / gamma;
   const avg = (cols: string[]): number | null => {
     const vs = cols.map((c) => row[c]).filter((v): v is number => typeof v === "number");
@@ -626,10 +626,8 @@ function axialEffForRow(row: Row, columns: string[]): number | null {
   if (t1C === null || p1r === null || p2g === null || t2C === null) return null;
   const T1 = t1C + 273.15;
   const T2 = t2C + 273.15;
-  // Axial compressor suction sits at ~ambient: a reading near/below 1 bar is
-  // already absolute (barometric), so don't add atmosphere to it again.
-  const P1 = p1r <= 1.5 ? p1r : p1r + P_ATM;
-  const P2 = p2g + P_ATM;
+  const P1 = p1r; // already absolute
+  const P2 = p2g + P_ATM; // gauge → absolute
   if (T1 <= 0 || P1 <= 0 || P2 <= P1 || T2 <= T1) return null;
   const eff = (T1 * (Math.pow(P2 / P1, exp) - 1)) / (T2 - T1);
   if (!Number.isFinite(eff) || eff <= 0 || eff > 1.05) return null;
