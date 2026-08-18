@@ -9,8 +9,6 @@ import {
   Bar,
   AreaChart,
   Area,
-  PieChart,
-  Pie,
   Cell,
   XAxis,
   YAxis,
