@@ -1080,7 +1080,7 @@ function SectionView({
     { id: nextPanelId(), kind: "line", sensors: initialSensors },
     {
       id: nextPanelId(),
-      kind: "bar",
+      kind: "area",
       sensors: sensors.slice(0, Math.min(3, sensors.length)),
     },
   ]);
@@ -1118,14 +1118,6 @@ function SectionView({
             onClick={() => addPanel("line")}
           >
             <Plus className="size-3 mr-1" /> Line
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 text-xs"
-            onClick={() => addPanel("bar")}
-          >
-            <Plus className="size-3 mr-1" /> Bar
           </Button>
           <Button
             size="sm"
@@ -1300,7 +1292,6 @@ function ChartPanel({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="line">Line</SelectItem>
-                <SelectItem value="bar">Bar</SelectItem>
                 <SelectItem value="area">Area</SelectItem>
               </SelectContent>
             </Select>
@@ -1586,7 +1577,7 @@ interface CompareQuery {
   error: Error | null;
 }
 
-type ChartKind = "line" | "bar" | "heatmap" | "pie";
+type ChartKind = "line";
 
 function CompareView({
   trainNames,
@@ -1743,7 +1734,7 @@ function CompareView({
             <span className="text-xs text-muted-foreground uppercase tracking-wider w-16">
               Chart
             </span>
-            {(["line", "bar", "heatmap", "pie"] as ChartKind[]).map((k) => (
+            {(["line"] as ChartKind[]).map((k) => (
               <button
                 key={k}
                 onClick={() => setChartKind(k)}
@@ -1790,14 +1781,8 @@ function CompareView({
                 <div className="h-full grid place-items-center text-sm text-muted-foreground">
                   Select at least one sensor and one train
                 </div>
-              ) : chartKind === "line" ? (
-                <LineCompare data={chartData} series={series} />
-              ) : chartKind === "bar" ? (
-                <BarCompare data={chartData} series={series} />
-              ) : chartKind === "pie" ? (
-                <PieCompare latest={latestPerSeries} />
               ) : (
-                <HeatmapCompare data={chartData} series={series} />
+                <LineCompare data={chartData} series={series} />
               )}
             </div>
           </CardContent>
