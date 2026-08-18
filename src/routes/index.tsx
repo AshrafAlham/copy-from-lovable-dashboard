@@ -409,6 +409,15 @@ function DashboardBody({
     [kpis, activeGroup]
   );
 
+  // Axial compressor isentropic efficiency — shown as a trend chart via an icon
+  // on the Axial Compressor page (replaces the old efficiency KPI card).
+  const [effOpen, setEffOpen] = useState(false);
+  const isAxial = activeGroup === "Axial Compressor (Air)";
+  const effSeries = useMemo(
+    () => [{ train, points: axialEffSeries(filteredData, columns) }],
+    [filteredData, columns, train]
+  );
+
 
   return (
     <div className="space-y-6">
@@ -481,6 +490,25 @@ function DashboardBody({
           </CardContent>
         </Card>
       )}
+
+      {/* Axial compressor efficiency trend — icon shown only on that page */}
+      {isAxial && (
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            title="Axial compressor isentropic efficiency trend"
+            aria-label="Axial compressor isentropic efficiency trend"
+            onClick={() => setEffOpen(true)}
+          >
+            <TrendingUp className="size-4 text-primary" />
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            Isentropic efficiency trend — {train}
+          </span>
+        </div>
+      )}
+      <EffTrendDialog open={effOpen} onOpenChange={setEffOpen} series={effSeries} />
 
       {/* KPI grid — filtered by the currently selected system/page */}
       {visibleKpis.length > 0 && (
