@@ -634,15 +634,6 @@ function axialEffForRow(row: Row, columns: string[]): number | null {
   return eff * 100;
 }
 
-// Average isentropic efficiency across every row in the selected time range.
-function computeAxialIsentropicEff(data: Row[], columns: string[]): number | null {
-  const vals = data
-    .map((r) => axialEffForRow(r, columns))
-    .filter((v): v is number => v !== null);
-  if (!vals.length) return null;
-  return vals.reduce((a, b) => a + b, 0) / vals.length;
-}
-
 // Time-series of isentropic efficiency for one train.
 export function axialEffSeries(
   data: Row[],
@@ -741,7 +732,7 @@ function EffTrendDialog({
             Axial Compressor Isentropic Efficiency — Trend
           </DialogTitle>
           <DialogDescription className="font-mono text-xs">
-            ηc = T₁·[(P₂/P₁)^((γ−1)/γ) − 1] / (T₂ − T₁) · γ = 1.2857 · T in Kelvin
+            ηc = T₁·[(P₂/P₁)^((γ−1)/γ) − 1] / (T₂ − T₁) · γ = 1.4 · T in Kelvin · P₁ absolute, P₂ gauge
           </DialogDescription>
         </DialogHeader>
         <EffTrendChart series={series} />
