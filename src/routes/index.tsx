@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueries } from "@tanstack/react-query";
-import { Fragment, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -9,8 +9,6 @@ import {
   Bar,
   AreaChart,
   Area,
-  PieChart,
-  Pie,
   Cell,
   XAxis,
   YAxis,
@@ -99,7 +97,6 @@ const ONE_DAY = 24 * 60 * 60 * 1000;
 function Dashboard() {
   const trainNames = Object.keys(TRAIN_SHEETS);
   const [mode, setMode] = useState<"single" | "compare">("single");
-  const [effOpen, setEffOpen] = useState(false);
   const [train, setTrain] = useState(trainNames[0]);
   const url = TRAIN_SHEETS[train];
 
@@ -127,26 +124,13 @@ function Dashboard() {
     queries: trainNames.map((t) => ({
       queryKey: ["sheet", t, TRAIN_SHEETS[t]],
       queryFn: () => fetchSheet(TRAIN_SHEETS[t]),
-      enabled: !!TRAIN_SHEETS[t] && (mode === "compare" || effOpen),
+      enabled: !!TRAIN_SHEETS[t] && mode === "compare",
       refetchInterval: () => msUntilNext11AM(),
       staleTime: ONE_DAY,
       refetchOnWindowFocus: false,
     })),
   });
 
-  // Isentropic efficiency trend series: current train in single mode, all trains in compare mode.
-  const compareData = compareQueries.map((q) => q.data);
-  const effSeries = useMemo(() => {
-    if (mode === "single")
-      return query.data
-        ? [{ train, points: axialEffSeries(query.data.rows, query.data.columns) }]
-        : [];
-    return compareData.map((d, i) => ({
-      train: trainNames[i],
-      points: d ? axialEffSeries(d.rows, d.columns) : [],
-    }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, train, query.data, ...compareData]);
 
 
 
@@ -217,15 +201,6 @@ function Dashboard() {
                 }`}
               />
             </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              title="Isentropic efficiency trend"
-              aria-label="Isentropic efficiency trend"
-              onClick={() => setEffOpen(true)}
-            >
-              <TrendingUp className="size-4" />
-            </Button>
             <Button asChild variant="outline" size="sm">
               <Link to="/station-overview">Station Overview</Link>
             </Button>
@@ -269,7 +244,6 @@ function Dashboard() {
         )}
 
       </main>
-      <EffTrendDialog open={effOpen} onOpenChange={setEffOpen} series={effSeries} />
     </div>
   );
 }
@@ -435,6 +409,15 @@ function DashboardBody({
     [kpis, activeGroup]
   );
 
+  // Axial compressor isentropic efficiency — shown as a trend chart via an icon
+  // on the Axial Compressor page (replaces the old efficiency KPI card).
+  const [effOpen, setEffOpen] = useState(false);
+  const isAxial = activeGroup === "Axial Compressor (Air)";
+  const effSeries = useMemo(
+    () => [{ train, points: axialEffSeries(filteredData, columns) }],
+    [filteredData, columns, train]
+  );
+
 
   return (
     <div className="space-y-6">
@@ -507,6 +490,25 @@ function DashboardBody({
           </CardContent>
         </Card>
       )}
+
+      {/* Axial compressor efficiency trend — icon shown only on that page */}
+      {isAxial && (
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            title="Axial compressor isentropic efficiency trend"
+            aria-label="Axial compressor isentropic efficiency trend"
+            onClick={() => setEffOpen(true)}
+          >
+            <TrendingUp className="size-4 text-primary" />
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            Isentropic efficiency trend — {train}
+          </span>
+        </div>
+      )}
+      <EffTrendDialog open={effOpen} onOpenChange={setEffOpen} series={effSeries} />
 
       {/* KPI grid — filtered by the currently selected system/page */}
       {visibleKpis.length > 0 && (
@@ -598,10 +600,10 @@ interface Kpi {
 
 // Isentropic efficiency of an axial air compressor from the latest row.
 // User equation: ηc = T1 * [(P2/P1)^((γ−1)/γ) − 1] / (T2 − T1)
-// Pressures are converted to absolute (barg + 1.01325) and temperatures to Kelvin.
+// P1 is recorded ABSOLUTE (barometric), P2 is GAUGE → convert P2 only.
 function axialEffForRow(row: Row, columns: string[]): number | null {
   const P_ATM = 1.01325;
-  const gamma = 1.2857;
+  const gamma = 1.4;
   const exp = (gamma - 1) / gamma;
   const avg = (cols: string[]): number | null => {
     const vs = cols.map((c) => row[c]).filter((v): v is number => typeof v === "number");
@@ -626,23 +628,12 @@ function axialEffForRow(row: Row, columns: string[]): number | null {
   if (t1C === null || p1r === null || p2g === null || t2C === null) return null;
   const T1 = t1C + 273.15;
   const T2 = t2C + 273.15;
-  // Axial compressor suction sits at ~ambient: a reading near/below 1 bar is
-  // already absolute (barometric), so don't add atmosphere to it again.
-  const P1 = p1r <= 1.5 ? p1r : p1r + P_ATM;
-  const P2 = p2g + P_ATM;
+  const P1 = p1r; // already absolute
+  const P2 = p2g + P_ATM; // gauge → absolute
   if (T1 <= 0 || P1 <= 0 || P2 <= P1 || T2 <= T1) return null;
   const eff = (T1 * (Math.pow(P2 / P1, exp) - 1)) / (T2 - T1);
   if (!Number.isFinite(eff) || eff <= 0 || eff > 1.05) return null;
   return eff * 100;
-}
-
-// Average isentropic efficiency across every row in the selected time range.
-function computeAxialIsentropicEff(data: Row[], columns: string[]): number | null {
-  const vals = data
-    .map((r) => axialEffForRow(r, columns))
-    .filter((v): v is number => v !== null);
-  if (!vals.length) return null;
-  return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
 
 // Time-series of isentropic efficiency for one train.
@@ -743,7 +734,7 @@ function EffTrendDialog({
             Axial Compressor Isentropic Efficiency — Trend
           </DialogTitle>
           <DialogDescription className="font-mono text-xs">
-            ηc = T₁·[(P₂/P₁)^((γ−1)/γ) − 1] / (T₂ − T₁) · γ = 1.2857 · T in Kelvin
+            ηc = T₁·[(P₂/P₁)^((γ−1)/γ) − 1] / (T₂ − T₁) · γ = 1.4 · T in Kelvin · P₁ absolute, P₂ gauge
           </DialogDescription>
         </DialogHeader>
         <EffTrendChart series={series} />
@@ -831,21 +822,9 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
       items.push({ label: "Average Value", value: avg, column: "", unit: "", groups: [groupName] });
   }
 
-  // Isentropic efficiency of the axial (air) compressor
-  const eff = computeAxialIsentropicEff(data, columns);
-  if (eff !== null) {
-    let tone: Kpi["tone"] = "default";
-    if (eff < 70) tone = "warning";
-    if (eff < 60) tone = "danger";
-    items.push({
-      label: "Isentropic Efficiency",
-      value: eff,
-      column: "",
-      unit: "%",
-      tone,
-      groups: ["Axial Compressor (Air)"],
-    });
-  }
+  // Axial Compressor efficiency is shown as a trend chart (icon on that page),
+  // not as a KPI card.
+
 
   // Tone heuristics
   return items.map((k) => {
@@ -1103,7 +1082,7 @@ function SectionView({
     { id: nextPanelId(), kind: "line", sensors: initialSensors },
     {
       id: nextPanelId(),
-      kind: "bar",
+      kind: "area",
       sensors: sensors.slice(0, Math.min(3, sensors.length)),
     },
   ]);
@@ -1141,14 +1120,6 @@ function SectionView({
             onClick={() => addPanel("line")}
           >
             <Plus className="size-3 mr-1" /> Line
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 text-xs"
-            onClick={() => addPanel("bar")}
-          >
-            <Plus className="size-3 mr-1" /> Bar
           </Button>
           <Button
             size="sm"
@@ -1323,7 +1294,6 @@ function ChartPanel({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="line">Line</SelectItem>
-                <SelectItem value="bar">Bar</SelectItem>
                 <SelectItem value="area">Area</SelectItem>
               </SelectContent>
             </Select>
@@ -1609,7 +1579,7 @@ interface CompareQuery {
   error: Error | null;
 }
 
-type ChartKind = "line" | "bar" | "heatmap" | "pie";
+type ChartKind = "line";
 
 function CompareView({
   trainNames,
@@ -1766,7 +1736,7 @@ function CompareView({
             <span className="text-xs text-muted-foreground uppercase tracking-wider w-16">
               Chart
             </span>
-            {(["line", "bar", "heatmap", "pie"] as ChartKind[]).map((k) => (
+            {(["line"] as ChartKind[]).map((k) => (
               <button
                 key={k}
                 onClick={() => setChartKind(k)}
@@ -1813,14 +1783,8 @@ function CompareView({
                 <div className="h-full grid place-items-center text-sm text-muted-foreground">
                   Select at least one sensor and one train
                 </div>
-              ) : chartKind === "line" ? (
-                <LineCompare data={chartData} series={series} />
-              ) : chartKind === "bar" ? (
-                <BarCompare data={chartData} series={series} />
-              ) : chartKind === "pie" ? (
-                <PieCompare latest={latestPerSeries} />
               ) : (
-                <HeatmapCompare data={chartData} series={series} />
+                <LineCompare data={chartData} series={series} />
               )}
             </div>
           </CardContent>
@@ -1943,189 +1907,5 @@ function LineCompare({
   );
 }
 
-function BarCompare({
-  data,
-  series,
-}: {
-  data: Record<string, string | number | null>[];
-  series: Series[];
-}) {
-  // Show only the most recent 24 timestamps so bars are legible
-  const trimmed = data.slice(-24);
-  return (
-    <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={trimmed} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-        <XAxis dataKey="t" stroke="var(--color-muted-foreground)" fontSize={11} tickMargin={6} />
-        <YAxis
-          stroke="var(--color-muted-foreground)"
-          fontSize={11}
-          tickMargin={4}
-          domain={[
-            (dataMin: number) =>
-              Number.isFinite(dataMin) ? dataMin - Math.max(Math.abs(dataMin) * 0.05, 0.5) : 0,
-            (dataMax: number) =>
-              Number.isFinite(dataMax) ? dataMax + Math.max(Math.abs(dataMax) * 0.05, 0.5) : 1,
-          ]}
-          allowDataOverflow={false}
-        />
-        <Tooltip
-          contentStyle={{
-            background: "var(--color-popover)",
-            border: "1px solid var(--color-border)",
-            borderRadius: 8,
-            fontSize: 12,
-          }}
-        />
-        <Legend wrapperStyle={{ fontSize: 11 }} />
-        {series.map((s, i) => (
-          <Bar
-            key={s.key}
-            dataKey={s.key}
-            fill={CHART_COLORS[i % CHART_COLORS.length]}
-            name={s.label}
-          />
-        ))}
-      </BarChart>
-    </ResponsiveContainer>
-  );
-}
-
-function PieCompare({
-  latest,
-}: {
-  latest: (Series & { value: number | null })[];
-}) {
-  const items = latest
-    .filter((d) => typeof d.value === "number" && (d.value as number) > 0)
-    .map((d) => ({ name: d.label, value: d.value as number }));
-  if (items.length === 0) {
-    return (
-      <div className="h-full grid place-items-center text-sm text-muted-foreground">
-        No positive latest values to render as a pie
-      </div>
-    );
-  }
-  return (
-    <ResponsiveContainer width="100%" height="100%">
-      <PieChart>
-        <Tooltip
-          contentStyle={{
-            background: "var(--color-popover)",
-            border: "1px solid var(--color-border)",
-            borderRadius: 8,
-            fontSize: 12,
-          }}
-        />
-        <Legend wrapperStyle={{ fontSize: 11 }} />
-        <Pie
-          data={items}
-          dataKey="value"
-          nameKey="name"
-          outerRadius="75%"
-          label={(d) => d.name}
-        >
-          {items.map((_, i) => (
-            <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-          ))}
-        </Pie>
-      </PieChart>
-    </ResponsiveContainer>
-  );
-}
-
-function HeatmapCompare({
-  data,
-  series,
-}: {
-  data: Record<string, string | number | null>[];
-  series: Series[];
-}) {
-  // Use the most recent N timestamps so cells stay visible
-  const N = 40;
-  const slice = data.slice(-N);
-  if (slice.length === 0 || series.length === 0) {
-    return (
-      <div className="h-full grid place-items-center text-sm text-muted-foreground">
-        No data to render
-      </div>
-    );
-  }
-
-  // Compute min/max per series for row-normalised color
-  const stats = series.map((s) => {
-    let min = Infinity;
-    let max = -Infinity;
-    for (const row of slice) {
-      const v = row[s.key];
-      if (typeof v === "number") {
-        if (v < min) min = v;
-        if (v > max) max = v;
-      }
-    }
-    return { min, max };
-  });
-
-  return (
-    <ScrollArea className="h-full w-full">
-      <div className="min-w-fit">
-        <div
-          className="grid gap-px"
-          style={{
-            gridTemplateColumns: `180px repeat(${slice.length}, 22px)`,
-          }}
-        >
-          {/* Header row */}
-          <div className="text-[10px] font-mono text-muted-foreground sticky left-0 bg-card px-2 py-1">
-            sensor · train
-          </div>
-          {slice.map((row, i) => (
-            <div
-              key={i}
-              className="text-[9px] font-mono text-muted-foreground -rotate-90 origin-left h-6 translate-y-5 whitespace-nowrap"
-            >
-              {String(row.t)}
-            </div>
-          ))}
-
-          {/* Data rows */}
-          {series.map((s, rIdx) => {
-            const { min, max } = stats[rIdx];
-            const range = max - min || 1;
-            return (
-              <Fragment key={s.key}>
-                <div
-                  key={`label-${s.key}`}
-                  className="text-[10px] font-mono px-2 py-1 truncate sticky left-0 bg-card border-r border-border"
-                  title={s.key}
-                >
-                  {s.label}
-                </div>
-                {slice.map((row, cIdx) => {
-                  const v = row[s.key];
-                  const n = typeof v === "number" ? (v - min) / range : null;
-                  const bg =
-                    n === null
-                      ? "transparent"
-                      : `color-mix(in oklab, var(--color-primary) ${Math.round(
-                          n * 100
-                        )}%, var(--color-muted))`;
-                  return (
-                    <div
-                      key={`${s.key}-${cIdx}`}
-                      className="h-6 rounded-sm"
-                      style={{ background: bg }}
-                      title={typeof v === "number" ? `${s.label}: ${v.toFixed(2)}` : "—"}
-                    />
-                  );
-                })}
-              </Fragment>
-            );
-          })}
-        </div>
-      </div>
-    </ScrollArea>
-  );
-}
 
 
