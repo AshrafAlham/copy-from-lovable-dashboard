@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import {
@@ -7,8 +7,6 @@ import {
   Line,
   BarChart,
   Bar,
-  AreaChart,
-  Area,
   Cell,
   XAxis,
   YAxis,
