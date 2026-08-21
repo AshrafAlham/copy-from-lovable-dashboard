@@ -9,20 +9,8 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as StationOverviewRouteImport } from './routes/station-overview'
-import { Route as PerformanceMapRouteImport } from './routes/performance-map'
 import { Route as IndexRouteImport } from './routes/index'
 
-const StationOverviewRoute = StationOverviewRouteImport.update({
-  id: '/station-overview',
-  path: '/station-overview',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PerformanceMapRoute = PerformanceMapRouteImport.update({
-  id: '/performance-map',
-  path: '/performance-map',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -31,50 +19,28 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/performance-map': typeof PerformanceMapRoute
-  '/station-overview': typeof StationOverviewRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/performance-map': typeof PerformanceMapRoute
-  '/station-overview': typeof StationOverviewRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/performance-map': typeof PerformanceMapRoute
-  '/station-overview': typeof StationOverviewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/performance-map' | '/station-overview'
+  fullPaths: '/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/performance-map' | '/station-overview'
-  id: '__root__' | '/' | '/performance-map' | '/station-overview'
+  to: '/'
+  id: '__root__' | '/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  PerformanceMapRoute: typeof PerformanceMapRoute
-  StationOverviewRoute: typeof StationOverviewRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/station-overview': {
-      id: '/station-overview'
-      path: '/station-overview'
-      fullPath: '/station-overview'
-      preLoaderRoute: typeof StationOverviewRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/performance-map': {
-      id: '/performance-map'
-      path: '/performance-map'
-      fullPath: '/performance-map'
-      preLoaderRoute: typeof PerformanceMapRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/': {
       id: '/'
       path: '/'
@@ -87,8 +53,6 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  PerformanceMapRoute: PerformanceMapRoute,
-  StationOverviewRoute: StationOverviewRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
