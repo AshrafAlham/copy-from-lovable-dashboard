@@ -1244,7 +1244,6 @@ function ChartPanel({
         tickMargin={4}
         domain={Y_AUTO_DOMAIN}
         tickFormatter={formatTick}
-        allowDecimals={false}
         allowDataOverflow={false}
       />
       <Tooltip
