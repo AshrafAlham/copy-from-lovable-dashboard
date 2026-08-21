@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import {
@@ -7,8 +7,6 @@ import {
   Line,
   BarChart,
   Bar,
-  AreaChart,
-  Area,
   Cell,
   XAxis,
   YAxis,
@@ -93,6 +91,33 @@ function msUntilNext11AM() {
 }
 
 const ONE_DAY = 24 * 60 * 60 * 1000;
+
+// Auto-fitting Y axis: pad 5%, and snap to whole numbers once the values are
+// large enough that decimals add no information.
+export const Y_AUTO_DOMAIN: [
+  (dataMin: number) => number,
+  (dataMax: number) => number,
+] = [
+  (dataMin: number) => {
+    if (!Number.isFinite(dataMin)) return 0;
+    const v = dataMin - Math.max(Math.abs(dataMin) * 0.05, 0.5);
+    return Math.abs(v) >= 5 ? Math.floor(v) : Number(v.toFixed(2));
+  },
+  (dataMax: number) => {
+    if (!Number.isFinite(dataMax)) return 1;
+    const v = dataMax + Math.max(Math.abs(dataMax) * 0.05, 0.5);
+    return Math.abs(v) >= 5 ? Math.ceil(v) : Number(v.toFixed(2));
+  },
+];
+
+// Kill floating-point noise on axis labels (59.99999954 → 60).
+export function formatTick(v: number | string) {
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return "";
+  if (Math.abs(n) >= 5) return String(Math.round(n));
+  const r = Number(n.toFixed(2));
+  return String(r);
+}
 
 function Dashboard() {
   const trainNames = Object.keys(TRAIN_SHEETS);
@@ -201,12 +226,6 @@ function Dashboard() {
                 }`}
               />
             </Button>
-            <Button asChild variant="outline" size="sm">
-              <Link to="/station-overview">Station Overview</Link>
-            </Button>
-            <Button asChild variant="outline" size="sm">
-              <Link to="/performance-map">Performance Map</Link>
-            </Button>
           </div>
         </div>
       </header>
@@ -240,6 +259,8 @@ function Dashboard() {
               isLoading: q.isLoading,
               error: q.error as Error | null,
             }))}
+            siteRows={siteQuery.data?.rows}
+            siteColumns={siteQuery.data?.columns}
           />
         )}
 
@@ -1052,7 +1073,7 @@ function KpiCard({
   );
 }
 
-type PanelKind = "line" | "bar" | "area";
+type PanelKind = "line" | "bar";
 type BarMode = "snapshot" | "timeseries";
 type BarOrient = "vertical" | "horizontal";
 
@@ -1076,15 +1097,9 @@ function SectionView({
   data: Row[];
   sectionName: string;
 }) {
-  // Default: two panels (Line + Bar) sharing the first sensors.
   const initialSensors = sensors.slice(0, Math.min(4, sensors.length));
   const [panels, setPanels] = useState<ChartPanelConfig[]>(() => [
     { id: nextPanelId(), kind: "line", sensors: initialSensors },
-    {
-      id: nextPanelId(),
-      kind: "area",
-      sensors: sensors.slice(0, Math.min(3, sensors.length)),
-    },
   ]);
   const [cols, setCols] = useState<1 | 2 | 3>(2);
 
@@ -1120,14 +1135,6 @@ function SectionView({
             onClick={() => addPanel("line")}
           >
             <Plus className="size-3 mr-1" /> Line
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 text-xs"
-            onClick={() => addPanel("area")}
-          >
-            <Plus className="size-3 mr-1" /> Area
           </Button>
         </div>
         <div className="flex items-center gap-1">
@@ -1262,10 +1269,8 @@ function ChartPanel({
         stroke="var(--color-muted-foreground)"
         fontSize={10}
         tickMargin={4}
-        domain={[
-          (dataMin: number) => (Number.isFinite(dataMin) ? dataMin - Math.max(Math.abs(dataMin) * 0.05, 0.5) : 0),
-          (dataMax: number) => (Number.isFinite(dataMax) ? dataMax + Math.max(Math.abs(dataMax) * 0.05, 0.5) : 1),
-        ]}
+        domain={Y_AUTO_DOMAIN}
+        tickFormatter={formatTick}
         allowDataOverflow={false}
       />
       <Tooltip
@@ -1294,7 +1299,7 @@ function ChartPanel({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="line">Line</SelectItem>
-                <SelectItem value="area">Area</SelectItem>
+                <SelectItem value="bar">Bar</SelectItem>
               </SelectContent>
             </Select>
             <span className="text-xs text-muted-foreground">
@@ -1410,7 +1415,7 @@ function ChartPanel({
                     />
                   ))}
                 </LineChart>
-              ) : kind === "bar" ? (
+              ) : (
                 barMode === "snapshot" ? (
                   <BarChart
                     data={snapshotData}
@@ -1479,23 +1484,6 @@ function ChartPanel({
                     ))}
                   </BarChart>
                 )
-              ) : (
-                <AreaChart data={displayData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
-                  {commonAxes}
-                  {sensors.map((s, i) => (
-                    <Area
-                      key={s}
-                      type="monotone"
-                      dataKey={s}
-                      stroke={CHART_COLORS[i % CHART_COLORS.length]}
-                      fill={CHART_COLORS[i % CHART_COLORS.length]}
-                      fillOpacity={0.2}
-                      strokeWidth={1.5}
-                      connectNulls
-                      name={shortName(s)}
-                    />
-                  ))}
-                </AreaChart>
               )}
             </ResponsiveContainer>
           )}
@@ -1579,18 +1567,85 @@ interface CompareQuery {
   error: Error | null;
 }
 
-type ChartKind = "line";
+
 
 function CompareView({
   trainNames,
   queries,
+  siteRows,
+  siteColumns,
 }: {
   trainNames: string[];
   queries: CompareQuery[];
+  siteRows?: Row[];
+  siteColumns?: string[];
 }) {
   const loaded = queries.filter((q) => q.data);
   const anyLoading = queries.some((q) => q.isLoading);
   const errors = queries.filter((q) => q.error);
+
+  // Time frame (same behaviour as single-train mode)
+  const [from, setFrom] = useState<string>("");
+  const [to, setTo] = useState<string>("");
+  const fromMs = from ? new Date(from + "T00:00:00").getTime() : null;
+  const toMs = to ? new Date(to + "T23:59:59").getTime() : null;
+  const inRange = (r: Row) => {
+    const t = r.__timestamp?.getTime();
+    if (t == null) return false;
+    if (fromMs != null && t < fromMs) return false;
+    if (toMs != null && t > toMs) return false;
+    return true;
+  };
+
+  // Site Conditions sensors, canonicalised so the same tag can be compared
+  // across trains: "(PDI-1314)" / "(PDI-2314)" → "(PDI-x314)".
+  const site = useMemo(() => {
+    if (!siteRows?.length || !siteColumns?.length) return null;
+    const split = splitSiteColumns(siteColumns);
+    const canonMap: Record<string, Record<string, string>> = {};
+    const canonNames: string[] = [];
+    const addCanon = (c: string) => {
+      if (!canonNames.includes(c)) canonNames.push(c);
+    };
+    for (const t of trainNames) canonMap[t] = {};
+    for (const t of Object.keys(split.byTrain)) {
+      if (!canonMap[t]) canonMap[t] = {};
+      for (const col of split.byTrain[t]) {
+        const canon = `Site · ${col.replace(/\(([A-Za-z]+)-[1-4]/, "($1-x")}`;
+        canonMap[t][canon] = col;
+        addCanon(canon);
+      }
+    }
+    for (const col of split.general) {
+      const canon = `Site · ${col}`;
+      for (const t of Object.keys(canonMap)) canonMap[t][canon] = col;
+      addCanon(canon);
+    }
+    return { canonMap, canonNames, rows: siteRows };
+  }, [siteRows, siteColumns, trainNames]);
+
+  // Per-train rows = train sheet rows + site rows projected onto canonical names
+  const rowsByTrain = useMemo(() => {
+    const out: Record<string, Row[]> = {};
+    for (const q of loaded) {
+      const rows: Row[] = q.data!.rows.filter(inRange);
+      const m = site?.canonMap[q.train];
+      if (m) {
+        for (const sr of site!.rows) {
+          if (!inRange(sr)) continue;
+          const r: Row = { __timestamp: sr.__timestamp };
+          for (const [canon, actual] of Object.entries(m)) {
+            const v = sr[actual];
+            r[canon] = typeof v === "number" ? v : null;
+          }
+          rows.push(r);
+        }
+      }
+      out[q.train] = rows;
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, site, fromMs, toMs]);
 
   // Union of sensor columns across all loaded trains
   const allColumns = useMemo(() => {
@@ -1599,12 +1654,15 @@ function CompareView({
     return Array.from(set);
   }, [loaded]);
 
-  const groups = useMemo(() => groupColumns(allColumns), [allColumns]);
+  const groups = useMemo(() => {
+    const g = groupColumns(allColumns);
+    if (site?.canonNames.length) g["Site Conditions"] = site.canonNames;
+    return g;
+  }, [allColumns, site]);
   const groupNames = Object.keys(groups);
   const [activeGroup, setActiveGroup] = useState<string>(groupNames[0] ?? "");
   const [selectedSensors, setSelectedSensors] = useState<string[]>([]);
   const [selectedTrains, setSelectedTrains] = useState<string[]>(trainNames);
-  const [chartKind, setChartKind] = useState<ChartKind>("line");
 
   const sensorsInGroup = groups[activeGroup] ?? [];
 
@@ -1620,7 +1678,7 @@ function CompareView({
     [selectedTrains, queries]
   );
 
-  // Series = one line/bar per (train × sensor) combination
+  // Series = one line per (train × sensor) combination
   const series = useMemo(() => {
     const out: { key: string; train: string; sensor: string; label: string }[] = [];
     for (const t of activeTrains) {
@@ -1640,45 +1698,44 @@ function CompareView({
   const chartData = useMemo(() => {
     if (series.length === 0) return [];
     const map = new Map<number, Record<string, string | number | null>>();
-    for (const q of loaded) {
-      if (!activeTrains.includes(q.train)) continue;
-      for (const row of q.data!.rows) {
+    for (const t of activeTrains) {
+      for (const row of rowsByTrain[t] ?? []) {
         if (!row.__timestamp) continue;
         const ts = row.__timestamp.getTime();
-        const key = format(row.__timestamp, "MM/dd HH:mm");
         let entry = map.get(ts);
         if (!entry) {
-          entry = { __ts: ts, t: key };
+          entry = { __ts: ts, t: format(row.__timestamp, "MM/dd HH:mm") };
           map.set(ts, entry);
         }
         for (const s of effectiveSensors) {
+          if (!(s in row)) continue;
           const v = row[s];
-          entry[`${q.train} · ${s}`] = typeof v === "number" ? v : null;
+          entry[`${t} · ${s}`] = typeof v === "number" ? v : null;
         }
       }
     }
     return Array.from(map.values()).sort(
       (a, b) => (a.__ts as number) - (b.__ts as number)
     );
-  }, [loaded, series, effectiveSensors, activeTrains]);
+  }, [rowsByTrain, series, effectiveSensors, activeTrains]);
 
-
-  // Latest reading per series (used by bar/pie)
+  // Latest reading per series (within the selected time frame)
   const latestPerSeries = useMemo(() => {
     return series.map((s) => {
-      const q = queries.find((x) => x.train === s.train);
-      const rows = q?.data?.rows ?? [];
+      const rows = rowsByTrain[s.train] ?? [];
       let val: number | null = null;
-      for (let i = rows.length - 1; i >= 0; i--) {
-        const v = rows[i][s.sensor];
-        if (typeof v === "number") {
+      let bestTs = -Infinity;
+      for (const r of rows) {
+        const v = r[s.sensor];
+        const ts = r.__timestamp?.getTime() ?? -Infinity;
+        if (typeof v === "number" && ts >= bestTs) {
           val = v;
-          break;
+          bestTs = ts;
         }
       }
       return { ...s, value: val };
     });
-  }, [series, queries]);
+  }, [series, rowsByTrain]);
 
   const toggleTrain = (t: string) =>
     setSelectedTrains((prev) =>
@@ -1734,21 +1791,33 @@ function CompareView({
 
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-muted-foreground uppercase tracking-wider w-16">
-              Chart
+              Time frame
             </span>
-            {(["line"] as ChartKind[]).map((k) => (
-              <button
-                key={k}
-                onClick={() => setChartKind(k)}
-                className={`text-xs px-2.5 py-1 rounded-md font-mono capitalize transition-colors ${
-                  chartKind === k
-                    ? "bg-primary/15 ring-1 ring-primary/30 text-foreground"
-                    : "border border-border text-muted-foreground hover:bg-muted"
-                }`}
-              >
-                {k}
-              </button>
-            ))}
+            <Input
+              type="date"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              className="h-8 w-[150px] text-xs"
+            />
+            <span className="text-xs text-muted-foreground">→</span>
+            <Input
+              type="date"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              className="h-8 w-[150px] text-xs"
+            />
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 text-xs"
+              disabled={!from && !to}
+              onClick={() => {
+                setFrom("");
+                setTo("");
+              }}
+            >
+              Clear
+            </Button>
             <div className="ml-auto flex items-center gap-2">
               <Select value={activeGroup} onValueChange={setActiveGroup}>
                 <SelectTrigger className="w-[220px] h-8 text-xs">
@@ -1873,12 +1942,8 @@ function LineCompare({
           stroke="var(--color-muted-foreground)"
           fontSize={11}
           tickMargin={4}
-          domain={[
-            (dataMin: number) =>
-              Number.isFinite(dataMin) ? dataMin - Math.max(Math.abs(dataMin) * 0.05, 0.5) : 0,
-            (dataMax: number) =>
-              Number.isFinite(dataMax) ? dataMax + Math.max(Math.abs(dataMax) * 0.05, 0.5) : 1,
-          ]}
+          domain={Y_AUTO_DOMAIN}
+          tickFormatter={formatTick}
           allowDataOverflow={false}
         />
         <Tooltip
