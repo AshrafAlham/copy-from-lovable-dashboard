@@ -92,6 +92,33 @@ function msUntilNext11AM() {
 
 const ONE_DAY = 24 * 60 * 60 * 1000;
 
+// Auto-fitting Y axis: pad 5%, and snap to whole numbers once the values are
+// large enough that decimals add no information.
+export const Y_AUTO_DOMAIN: [
+  (dataMin: number) => number,
+  (dataMax: number) => number,
+] = [
+  (dataMin: number) => {
+    if (!Number.isFinite(dataMin)) return 0;
+    const v = dataMin - Math.max(Math.abs(dataMin) * 0.05, 0.5);
+    return Math.abs(v) >= 5 ? Math.floor(v) : Number(v.toFixed(2));
+  },
+  (dataMax: number) => {
+    if (!Number.isFinite(dataMax)) return 1;
+    const v = dataMax + Math.max(Math.abs(dataMax) * 0.05, 0.5);
+    return Math.abs(v) >= 5 ? Math.ceil(v) : Number(v.toFixed(2));
+  },
+];
+
+// Kill floating-point noise on axis labels (59.99999954 → 60).
+export function formatTick(v: number | string) {
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return "";
+  if (Math.abs(n) >= 5) return String(Math.round(n));
+  const r = Number(n.toFixed(2));
+  return String(r);
+}
+
 function Dashboard() {
   const trainNames = Object.keys(TRAIN_SHEETS);
   const [mode, setMode] = useState<"single" | "compare">("single");
