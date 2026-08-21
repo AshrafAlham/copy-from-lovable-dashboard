@@ -1791,21 +1791,33 @@ function CompareView({
 
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-muted-foreground uppercase tracking-wider w-16">
-              Chart
+              Time frame
             </span>
-            {(["line"] as ChartKind[]).map((k) => (
-              <button
-                key={k}
-                onClick={() => setChartKind(k)}
-                className={`text-xs px-2.5 py-1 rounded-md font-mono capitalize transition-colors ${
-                  chartKind === k
-                    ? "bg-primary/15 ring-1 ring-primary/30 text-foreground"
-                    : "border border-border text-muted-foreground hover:bg-muted"
-                }`}
-              >
-                {k}
-              </button>
-            ))}
+            <Input
+              type="date"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              className="h-8 w-[150px] text-xs"
+            />
+            <span className="text-xs text-muted-foreground">→</span>
+            <Input
+              type="date"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              className="h-8 w-[150px] text-xs"
+            />
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 text-xs"
+              disabled={!from && !to}
+              onClick={() => {
+                setFrom("");
+                setTo("");
+              }}
+            >
+              Clear
+            </Button>
             <div className="ml-auto flex items-center gap-2">
               <Select value={activeGroup} onValueChange={setActiveGroup}>
                 <SelectTrigger className="w-[220px] h-8 text-xs">
