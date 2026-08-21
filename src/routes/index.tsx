@@ -1415,7 +1415,7 @@ function ChartPanel({
                     />
                   ))}
                 </LineChart>
-              ) : kind === "bar" ? (
+              ) : (
                 barMode === "snapshot" ? (
                   <BarChart
                     data={snapshotData}
