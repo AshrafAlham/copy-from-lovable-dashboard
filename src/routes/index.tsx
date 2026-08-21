@@ -232,6 +232,8 @@ function Dashboard() {
               isLoading: q.isLoading,
               error: q.error as Error | null,
             }))}
+            siteRows={siteQuery.data?.rows}
+            siteColumns={siteQuery.data?.columns}
           />
         )}
 
