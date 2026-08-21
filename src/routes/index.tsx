@@ -1567,7 +1567,7 @@ interface CompareQuery {
   error: Error | null;
 }
 
-type ChartKind = "line";
+
 
 function CompareView({
   trainNames,
