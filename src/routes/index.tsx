@@ -1484,23 +1484,6 @@ function ChartPanel({
                     ))}
                   </BarChart>
                 )
-              ) : (
-                <AreaChart data={displayData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
-                  {commonAxes}
-                  {sensors.map((s, i) => (
-                    <Area
-                      key={s}
-                      type="monotone"
-                      dataKey={s}
-                      stroke={CHART_COLORS[i % CHART_COLORS.length]}
-                      fill={CHART_COLORS[i % CHART_COLORS.length]}
-                      fillOpacity={0.2}
-                      strokeWidth={1.5}
-                      connectNulls
-                      name={shortName(s)}
-                    />
-                  ))}
-                </AreaChart>
               )}
             </ResponsiveContainer>
           )}
