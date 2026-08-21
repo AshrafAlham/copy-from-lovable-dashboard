@@ -1046,7 +1046,7 @@ function KpiCard({
   );
 }
 
-type PanelKind = "line" | "bar" | "area";
+type PanelKind = "line" | "bar";
 type BarMode = "snapshot" | "timeseries";
 type BarOrient = "vertical" | "horizontal";
 
@@ -1070,15 +1070,9 @@ function SectionView({
   data: Row[];
   sectionName: string;
 }) {
-  // Default: two panels (Line + Bar) sharing the first sensors.
   const initialSensors = sensors.slice(0, Math.min(4, sensors.length));
   const [panels, setPanels] = useState<ChartPanelConfig[]>(() => [
     { id: nextPanelId(), kind: "line", sensors: initialSensors },
-    {
-      id: nextPanelId(),
-      kind: "area",
-      sensors: sensors.slice(0, Math.min(3, sensors.length)),
-    },
   ]);
   const [cols, setCols] = useState<1 | 2 | 3>(2);
 
