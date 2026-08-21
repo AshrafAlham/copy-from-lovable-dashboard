@@ -1299,7 +1299,7 @@ function ChartPanel({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="line">Line</SelectItem>
-                <SelectItem value="area">Area</SelectItem>
+                <SelectItem value="bar">Bar</SelectItem>
               </SelectContent>
             </Select>
             <span className="text-xs text-muted-foreground">
