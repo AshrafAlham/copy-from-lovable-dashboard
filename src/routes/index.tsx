@@ -1109,14 +1109,6 @@ function SectionView({
           >
             <Plus className="size-3 mr-1" /> Line
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 text-xs"
-            onClick={() => addPanel("area")}
-          >
-            <Plus className="size-3 mr-1" /> Area
-          </Button>
         </div>
         <div className="flex items-center gap-1">
           <span className="text-xs text-muted-foreground mr-1">Layout</span>
