@@ -705,9 +705,10 @@ function EffTrendChart({
             tick={{ fontSize: 10 }}
             unit="%"
             domain={[
-              (min: number) => Math.max(0, min - Math.max(0.5, Math.abs(min) * 0.05)),
-              (max: number) => max + Math.max(0.5, Math.abs(max) * 0.05),
+              (min: number) => Math.max(0, Math.floor(min - Math.max(0.5, Math.abs(min) * 0.05))),
+              (max: number) => Math.ceil(max + Math.max(0.5, Math.abs(max) * 0.05)),
             ]}
+            tickFormatter={formatTick}
             allowDataOverflow={false}
           />
           <Tooltip
@@ -1446,7 +1447,7 @@ function ChartPanel({
                           interval={0}
                           height={70}
                         />
-                        <YAxis stroke="var(--color-muted-foreground)" fontSize={10} />
+                        <YAxis stroke="var(--color-muted-foreground)" fontSize={10} tickFormatter={formatTick} />
                       </>
                     )}
                     <Tooltip
@@ -1567,6 +1568,12 @@ interface CompareQuery {
   error: Error | null;
 }
 
+// Tags carry the train number, e.g. Train A "(LT-1600)" vs Train B "(LT-2600)".
+// Canonicalise to "(LT-x600)" so the same measurement lines up across trains.
+function canonKey(col: string) {
+  return col.replace(/\(([A-Za-z]+)-[1-4](?=\d)/g, "($1-x");
+}
+
 
 
 function CompareView({
@@ -1611,7 +1618,7 @@ function CompareView({
     for (const t of Object.keys(split.byTrain)) {
       if (!canonMap[t]) canonMap[t] = {};
       for (const col of split.byTrain[t]) {
-        const canon = `Site · ${col.replace(/\(([A-Za-z]+)-[1-4]/, "($1-x")}`;
+        const canon = `Site · ${canonKey(col)}`;
         canonMap[t][canon] = col;
         addCanon(canon);
       }
@@ -1624,11 +1631,21 @@ function CompareView({
     return { canonMap, canonNames, rows: siteRows };
   }, [siteRows, siteColumns, trainNames]);
 
-  // Per-train rows = train sheet rows + site rows projected onto canonical names
+  // Per-train rows, keyed by canonical sensor names (train sheet + site sheet)
   const rowsByTrain = useMemo(() => {
     const out: Record<string, Row[]> = {};
     for (const q of loaded) {
-      const rows: Row[] = q.data!.rows.filter(inRange);
+      const rows: Row[] = [];
+      const cols = q.data!.columns;
+      for (const src of q.data!.rows) {
+        if (!inRange(src)) continue;
+        const r: Row = { __timestamp: src.__timestamp };
+        for (const c of cols) {
+          const v = src[c];
+          r[canonKey(c)] = typeof v === "number" ? v : null;
+        }
+        rows.push(r);
+      }
       const m = site?.canonMap[q.train];
       if (m) {
         for (const sr of site!.rows) {
@@ -1647,10 +1664,10 @@ function CompareView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded, site, fromMs, toMs]);
 
-  // Union of sensor columns across all loaded trains
+  // Union of canonical sensor columns across all loaded trains
   const allColumns = useMemo(() => {
     const set = new Set<string>();
-    for (const q of loaded) for (const c of q.data!.columns) set.add(c);
+    for (const q of loaded) for (const c of q.data!.columns) set.add(canonKey(c));
     return Array.from(set);
   }, [loaded]);
 
