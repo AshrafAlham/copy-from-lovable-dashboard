@@ -1625,11 +1625,21 @@ function CompareView({
     return { canonMap, canonNames, rows: siteRows };
   }, [siteRows, siteColumns, trainNames]);
 
-  // Per-train rows = train sheet rows + site rows projected onto canonical names
+  // Per-train rows, keyed by canonical sensor names (train sheet + site sheet)
   const rowsByTrain = useMemo(() => {
     const out: Record<string, Row[]> = {};
     for (const q of loaded) {
-      const rows: Row[] = q.data!.rows.filter(inRange);
+      const rows: Row[] = [];
+      const cols = q.data!.columns;
+      for (const src of q.data!.rows) {
+        if (!inRange(src)) continue;
+        const r: Row = { __timestamp: src.__timestamp };
+        for (const c of cols) {
+          const v = src[c];
+          r[canonKey(c)] = typeof v === "number" ? v : null;
+        }
+        rows.push(r);
+      }
       const m = site?.canonMap[q.train];
       if (m) {
         for (const sr of site!.rows) {
@@ -1648,10 +1658,10 @@ function CompareView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded, site, fromMs, toMs]);
 
-  // Union of sensor columns across all loaded trains
+  // Union of canonical sensor columns across all loaded trains
   const allColumns = useMemo(() => {
     const set = new Set<string>();
-    for (const q of loaded) for (const c of q.data!.columns) set.add(c);
+    for (const q of loaded) for (const c of q.data!.columns) set.add(canonKey(c));
     return Array.from(set);
   }, [loaded]);
 
