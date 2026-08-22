@@ -705,9 +705,10 @@ function EffTrendChart({
             tick={{ fontSize: 10 }}
             unit="%"
             domain={[
-              (min: number) => Math.max(0, min - Math.max(0.5, Math.abs(min) * 0.05)),
-              (max: number) => max + Math.max(0.5, Math.abs(max) * 0.05),
+              (min: number) => Math.max(0, Math.floor(min - Math.max(0.5, Math.abs(min) * 0.05))),
+              (max: number) => Math.ceil(max + Math.max(0.5, Math.abs(max) * 0.05)),
             ]}
+            tickFormatter={formatTick}
             allowDataOverflow={false}
           />
           <Tooltip
