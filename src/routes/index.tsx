@@ -1612,7 +1612,7 @@ function CompareView({
     for (const t of Object.keys(split.byTrain)) {
       if (!canonMap[t]) canonMap[t] = {};
       for (const col of split.byTrain[t]) {
-        const canon = `Site · ${col.replace(/\(([A-Za-z]+)-[1-4]/, "($1-x")}`;
+        const canon = `Site · ${canonKey(col)}`;
         canonMap[t][canon] = col;
         addCanon(canon);
       }
