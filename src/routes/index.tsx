@@ -1568,6 +1568,12 @@ interface CompareQuery {
   error: Error | null;
 }
 
+// Tags carry the train number, e.g. Train A "(LT-1600)" vs Train B "(LT-2600)".
+// Canonicalise to "(LT-x600)" so the same measurement lines up across trains.
+function canonKey(col: string) {
+  return col.replace(/\(([A-Za-z]+)-[1-4](?=\d)/g, "($1-x");
+}
+
 
 
 function CompareView({
