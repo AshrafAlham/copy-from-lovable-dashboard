@@ -1447,7 +1447,7 @@ function ChartPanel({
                           interval={0}
                           height={70}
                         />
-                        <YAxis stroke="var(--color-muted-foreground)" fontSize={10} />
+                        <YAxis stroke="var(--color-muted-foreground)" fontSize={10} tickFormatter={formatTick} />
                       </>
                     )}
                     <Tooltip
