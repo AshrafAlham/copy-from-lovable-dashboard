@@ -1674,12 +1674,16 @@ function CompareView({
     return Array.from(set);
   }, [loaded]);
 
+  // Site sensors are merged into the same topical groups as the train sheets,
+  // so picking "Lube Oil" shows lube-oil sensors from trains AND from site.
   const groups = useMemo(() => {
-    const g = groupColumns(allColumns);
-    if (site?.generalSensorNames.length) g["Site — General"] = site.generalSensorNames;
-    if (site?.trainSensorNames.length) g["Site — Trains"] = site.trainSensorNames;
-    return g;
+    const siteNames = [
+      ...(site?.trainSensorNames ?? []),
+      ...(site?.generalSensorNames ?? []),
+    ];
+    return groupColumns([...allColumns, ...siteNames]);
   }, [allColumns, site]);
+
   const groupNames = Object.keys(groups);
   const [activeGroup, setActiveGroup] = useState<string>(groupNames[0] ?? "");
   const [selectedSensors, setSelectedSensors] = useState<string[]>([]);
