@@ -1606,13 +1606,16 @@ function CompareView({
 
   // Site Conditions sensors, canonicalised so the same tag can be compared
   // across trains: "(PDI-1314)" / "(PDI-2314)" → "(PDI-x314)".
+  // Keep general site readings separate from train-tagged site readings so
+  // compare mode mirrors the single-train pages: Site — General / Site — Train.
   const site = useMemo(() => {
     if (!siteRows?.length || !siteColumns?.length) return null;
     const split = splitSiteColumns(siteColumns);
     const canonMap: Record<string, Record<string, string>> = {};
-    const canonNames: string[] = [];
-    const addCanon = (c: string) => {
-      if (!canonNames.includes(c)) canonNames.push(c);
+    const trainSensorNames: string[] = [];
+    const generalSensorNames: string[] = [];
+    const addCanon = (list: string[], c: string) => {
+      if (!list.includes(c)) list.push(c);
     };
     for (const t of trainNames) canonMap[t] = {};
     for (const t of Object.keys(split.byTrain)) {
@@ -1620,15 +1623,15 @@ function CompareView({
       for (const col of split.byTrain[t]) {
         const canon = `Site · ${canonKey(col)}`;
         canonMap[t][canon] = col;
-        addCanon(canon);
+        addCanon(trainSensorNames, canon);
       }
     }
     for (const col of split.general) {
       const canon = `Site · ${col}`;
       for (const t of Object.keys(canonMap)) canonMap[t][canon] = col;
-      addCanon(canon);
+      addCanon(generalSensorNames, canon);
     }
-    return { canonMap, canonNames, rows: siteRows };
+    return { canonMap, trainSensorNames, generalSensorNames, rows: siteRows };
   }, [siteRows, siteColumns, trainNames]);
 
   // Per-train rows, keyed by canonical sensor names (train sheet + site sheet)
@@ -1673,7 +1676,8 @@ function CompareView({
 
   const groups = useMemo(() => {
     const g = groupColumns(allColumns);
-    if (site?.canonNames.length) g["Site Conditions"] = site.canonNames;
+    if (site?.generalSensorNames.length) g["Site — General"] = site.generalSensorNames;
+    if (site?.trainSensorNames.length) g["Site — Trains"] = site.trainSensorNames;
     return g;
   }, [allColumns, site]);
   const groupNames = Object.keys(groups);
