@@ -1102,7 +1102,7 @@ function SectionView({
   const [panels, setPanels] = useState<ChartPanelConfig[]>(() => [
     { id: nextPanelId(), kind: "line", sensors: initialSensors },
   ]);
-  const [cols, setCols] = useState<1 | 2 | 3>(2);
+  const [cols, setCols] = useState<1 | 2 | 3>(1);
 
   const addPanel = (kind: PanelKind) =>
     setPanels((p) => [
