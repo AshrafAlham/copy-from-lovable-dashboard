@@ -59,7 +59,7 @@ import { Activity, AlertTriangle, RefreshCw, Gauge, Plus, X, LayoutGrid, Columns
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Rotating Equipment Dashboard" },
+      { title: "Trains Operation Monitor (TOM)" },
       {
         name: "description",
         content:
@@ -170,7 +170,7 @@ function Dashboard() {
             </div>
             <div>
               <h1 className="text-lg font-semibold tracking-tight">
-                Rotating Equipment — Control Room
+                Trains Operation Monitor (TOM)
               </h1>
               <p className="text-xs text-muted-foreground font-mono">
                 Auto-refresh daily at 11:00 AM
