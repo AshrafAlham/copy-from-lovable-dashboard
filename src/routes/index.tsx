@@ -657,19 +657,59 @@ function axialEffForRow(row: Row, columns: string[]): number | null {
   return eff * 100;
 }
 
+const median = (a: number[]) => {
+  const s = [...a].sort((x, y) => x - y);
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+};
+
+// Centered rolling median (odd window) — removes single-point spikes without
+// shifting the trend in time.
+function rollingMedian(vals: number[], win: number) {
+  const half = Math.floor(win / 2);
+  return vals.map((_, i) => {
+    const slice = vals.slice(Math.max(0, i - half), Math.min(vals.length, i + half + 1));
+    return median(slice);
+  });
+}
+
 // Time-series of isentropic efficiency for one train.
+// Instrument noise (a temperature or pressure reading briefly off) produces
+// non-physical jumps, so the raw series is cleaned in three stages:
+//  1. hard physical bounds
+//  2. robust outlier rejection (median + MAD)
+//  3. centered rolling median smoothing
+// What is left is the slow degradation / washing-recovery behaviour.
 export function axialEffSeries(
   data: Row[],
   columns: string[],
 ): { ts: number; eff: number }[] {
-  const out: { ts: number; eff: number }[] = [];
+  const raw: { ts: number; eff: number }[] = [];
   for (const r of data) {
     const eff = axialEffForRow(r, columns);
     const ts = r.__timestamp?.getTime();
-    if (eff !== null && ts) out.push({ ts, eff });
+    // Axial compressors realistically sit between 60% and 95%.
+    if (eff !== null && ts && eff >= 50 && eff <= 100) raw.push({ ts, eff });
   }
-  return out.sort((a, b) => a.ts - b.ts);
+  raw.sort((a, b) => a.ts - b.ts);
+  if (raw.length < 5) return raw;
+
+  const vals = raw.map((p) => p.eff);
+  const med = median(vals);
+  const mad = median(vals.map((v) => Math.abs(v - med))) || 1e-6;
+  // 3 * 1.4826 * MAD ≈ 3 sigma for normally distributed noise.
+  const limit = 3 * 1.4826 * mad;
+  const kept = raw.filter((p) => Math.abs(p.eff - med) <= limit);
+  const base = kept.length >= 5 ? kept : raw;
+
+  const win = Math.min(7, base.length % 2 ? base.length : base.length - 1);
+  const smoothed = rollingMedian(
+    base.map((p) => p.eff),
+    Math.max(3, win),
+  );
+  return base.map((p, i) => ({ ts: p.ts, eff: smoothed[i] }));
 }
+
 
 function EffTrendChart({
   series,
