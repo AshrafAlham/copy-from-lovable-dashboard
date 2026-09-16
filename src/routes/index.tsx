@@ -1610,7 +1610,9 @@ function RawTable({
     return visible;
   }, [columns, search]);
 
-  const last20 = data.slice(-20).reverse();
+  // Show every reading in the selected time frame (newest first), matching the
+  // data the charts plot.
+  const last20 = useMemo(() => [...data].reverse(), [data]);
 
   return (
     <ScrollArea className="h-[420px] w-full">
