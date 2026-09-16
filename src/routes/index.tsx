@@ -1133,16 +1133,30 @@ function SectionView({
   sensors,
   data,
   sectionName,
+  onSelectionChange,
 }: {
   sensors: string[];
   data: Row[];
   sectionName: string;
+  onSelectionChange?: (sensors: string[]) => void;
 }) {
   const initialSensors = sensors.slice(0, Math.min(4, sensors.length));
   const [panels, setPanels] = useState<ChartPanelConfig[]>(() => [
     { id: nextPanelId(), kind: "line", sensors: initialSensors },
   ]);
   const [cols, setCols] = useState<1 | 2 | 3>(1);
+
+  // Report every sensor currently plotted so the Raw Readings table can mirror
+  // exactly what the charts on this page show.
+  const selectedKey = panels
+    .flatMap((p) => p.sensors)
+    .filter((s, i, a) => a.indexOf(s) === i)
+    .join("||");
+  useEffect(() => {
+    onSelectionChange?.(selectedKey ? selectedKey.split("||") : []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedKey]);
+
 
   const addPanel = (kind: PanelKind) =>
     setPanels((p) => [
