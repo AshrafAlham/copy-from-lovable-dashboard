@@ -584,26 +584,52 @@ function DashboardBody({
                 sensors={g.sensors}
                 data={g.source === "site" ? filteredSite : filteredData}
                 sectionName={g.label}
+                onSelectionChange={setChartSensors}
               />
             ))}
         </div>
       </div>
 
-      {/* Raw data */}
+      {/* Raw data — mirrors the active page and the sensors plotted in it */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between gap-4 flex-wrap">
-            <CardTitle className="text-base">Raw Readings</CardTitle>
-            <Input
-              placeholder="Filter columns…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="max-w-xs h-8"
-            />
+            <div>
+              <CardTitle className="text-base">Raw Readings</CardTitle>
+              <p className="text-xs text-muted-foreground font-mono mt-1">
+                {activeTab?.label ?? "—"} · {rawColumns.length} sensor
+                {rawColumns.length !== 1 && "s"} · {rawData.length} reading
+                {rawData.length !== 1 && "s"}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant={rawAll ? "outline" : "default"}
+                className="h-8 text-xs"
+                onClick={() => setRawAll(false)}
+              >
+                Charted sensors
+              </Button>
+              <Button
+                size="sm"
+                variant={rawAll ? "default" : "outline"}
+                className="h-8 text-xs"
+                onClick={() => setRawAll(true)}
+              >
+                All in page
+              </Button>
+              <Input
+                placeholder="Filter columns…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="max-w-xs h-8"
+              />
+            </div>
           </div>
         </CardHeader>
         <CardContent>
-          <RawTable data={filteredData} columns={columns} search={search} />
+          <RawTable data={rawData} columns={rawColumns} search={search} />
         </CardContent>
       </Card>
     </div>
