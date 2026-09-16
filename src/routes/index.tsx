@@ -439,6 +439,20 @@ function DashboardBody({
     [filteredData, columns, train]
   );
 
+  // Raw Readings follows the active page: same rows the charts use, and by
+  // default the exact sensors currently plotted.
+  const [chartSensors, setChartSensors] = useState<string[]>([]);
+  const [rawAll, setRawAll] = useState(false);
+  const activeTab = allTabs.find((t) => t.key === activeGroup);
+  const rawData = activeTab?.source === "site" ? filteredSite : filteredData;
+  const rawColumns = useMemo(() => {
+    const pageSensors = activeTab?.sensors ?? [];
+    if (rawAll || chartSensors.length === 0) return pageSensors;
+    const inPage = chartSensors.filter((s) => pageSensors.includes(s));
+    return inPage.length ? inPage : pageSensors;
+  }, [rawAll, chartSensors, activeTab]);
+
+
 
   return (
     <div className="space-y-6">
