@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueries } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -439,6 +439,20 @@ function DashboardBody({
     [filteredData, columns, train]
   );
 
+  // Raw Readings follows the active page: same rows the charts use, and by
+  // default the exact sensors currently plotted.
+  const [chartSensors, setChartSensors] = useState<string[]>([]);
+  const [rawAll, setRawAll] = useState(false);
+  const activeTab = allTabs.find((t) => t.key === activeGroup);
+  const rawData = activeTab?.source === "site" ? filteredSite : filteredData;
+  const rawColumns = useMemo(() => {
+    const pageSensors = activeTab?.sensors ?? [];
+    if (rawAll || chartSensors.length === 0) return pageSensors;
+    const inPage = chartSensors.filter((s) => pageSensors.includes(s));
+    return inPage.length ? inPage : pageSensors;
+  }, [rawAll, chartSensors, activeTab]);
+
+
 
   return (
     <div className="space-y-6">
@@ -584,26 +598,52 @@ function DashboardBody({
                 sensors={g.sensors}
                 data={g.source === "site" ? filteredSite : filteredData}
                 sectionName={g.label}
+                onSelectionChange={setChartSensors}
               />
             ))}
         </div>
       </div>
 
-      {/* Raw data */}
+      {/* Raw data — mirrors the active page and the sensors plotted in it */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between gap-4 flex-wrap">
-            <CardTitle className="text-base">Raw Readings</CardTitle>
-            <Input
-              placeholder="Filter columns…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="max-w-xs h-8"
-            />
+            <div>
+              <CardTitle className="text-base">Raw Readings</CardTitle>
+              <p className="text-xs text-muted-foreground font-mono mt-1">
+                {activeTab?.label ?? "—"} · {rawColumns.length} sensor
+                {rawColumns.length !== 1 && "s"} · {rawData.length} reading
+                {rawData.length !== 1 && "s"}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant={rawAll ? "outline" : "default"}
+                className="h-8 text-xs"
+                onClick={() => setRawAll(false)}
+              >
+                Charted sensors
+              </Button>
+              <Button
+                size="sm"
+                variant={rawAll ? "default" : "outline"}
+                className="h-8 text-xs"
+                onClick={() => setRawAll(true)}
+              >
+                All in page
+              </Button>
+              <Input
+                placeholder="Filter columns…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="max-w-xs h-8"
+              />
+            </div>
           </div>
         </CardHeader>
         <CardContent>
-          <RawTable data={filteredData} columns={columns} search={search} />
+          <RawTable data={rawData} columns={rawColumns} search={search} />
         </CardContent>
       </Card>
     </div>
@@ -1133,16 +1173,30 @@ function SectionView({
   sensors,
   data,
   sectionName,
+  onSelectionChange,
 }: {
   sensors: string[];
   data: Row[];
   sectionName: string;
+  onSelectionChange?: (sensors: string[]) => void;
 }) {
   const initialSensors = sensors.slice(0, Math.min(4, sensors.length));
   const [panels, setPanels] = useState<ChartPanelConfig[]>(() => [
     { id: nextPanelId(), kind: "line", sensors: initialSensors },
   ]);
   const [cols, setCols] = useState<1 | 2 | 3>(1);
+
+  // Report every sensor currently plotted so the Raw Readings table can mirror
+  // exactly what the charts on this page show.
+  const selectedKey = panels
+    .flatMap((p) => p.sensors)
+    .filter((s, i, a) => a.indexOf(s) === i)
+    .join("||");
+  useEffect(() => {
+    onSelectionChange?.(selectedKey ? selectedKey.split("||") : []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedKey]);
+
 
   const addPanel = (kind: PanelKind) =>
     setPanels((p) => [
@@ -1556,7 +1610,9 @@ function RawTable({
     return visible;
   }, [columns, search]);
 
-  const last20 = data.slice(-20).reverse();
+  // Show every reading in the selected time frame (newest first), matching the
+  // data the charts plot.
+  const last20 = useMemo(() => [...data].reverse(), [data]);
 
   return (
     <ScrollArea className="h-[420px] w-full">
