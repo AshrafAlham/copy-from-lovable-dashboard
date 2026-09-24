@@ -38,6 +38,8 @@ export const META_COLUMNS = new Set([
 
 // Section groupings — first matching rule wins. Order matters.
 export const SECTIONS: { name: string; match: (col: string) => boolean }[] = [
+  { name: "Seal Gas", match: (c) => /(seal gas|seal-process|primary vent|buffer air|gas comp\. suction)/i.test(c) },
+  { name: "Utilities", match: (c) => /(water|instrument p|utility p|compressor [abc] discharge t|dryer|diesel|flare|inlet [pt] \(|after reduction|filter in service)/i.test(c) },
   { name: "Lube Oil", match: (c) => /oil/i.test(c) },
   { name: "Axial Compressor (Air)", match: (c) => /(axial compressor|air |air press|air temp|filters|cooling air|plenum|compartment)/i.test(c) },
   { name: "Turbine Bearings — Temperature", match: (c) => /turbine.*bearing.*temp/i.test(c) },
@@ -48,7 +50,7 @@ export const SECTIONS: { name: string; match: (col: string) => boolean }[] = [
   { name: "Gearbox Bearings — Vibration", match: (c) => /gearbox.*bearing.*vibration/i.test(c) },
   { name: "Wheelspace", match: (c) => /wheelspace/i.test(c) },
   { name: "Exhaust", match: (c) => /(exhaust|spread)/i.test(c) },
-  { name: "Control", match: (c) => /(srv|gcv|igv|fsr|nozzle)/i.test(c) },
+  { name: "Control", match: (c) => /(srv|gcv|igv|fsr|nozzle|fuel gas|intermediate stage)/i.test(c) },
   { name: "Other", match: () => true },
 ];
 
@@ -71,6 +73,9 @@ export function groupColumns(columns: string[]): Record<string, string[]> {
 export function siteColumnTrainDigit(col: string): "1" | "2" | "3" | "4" | null {
   const tag = col.match(/\([A-Za-z]+-([1-4])\d/);
   if (tag) return tag[1] as "1" | "2" | "3" | "4";
+  // Untagged per-train columns named by letter, e.g. "Comp B ...", "Gearbox C".
+  const letter = col.match(/\b(?:comp|gearbox|turbine)\s+([A-D])\b/i);
+  if (letter) return String(" ABCD".indexOf(letter[1].toUpperCase())) as "1" | "2" | "3" | "4";
   return null;
 }
 
@@ -93,12 +98,17 @@ export function splitSiteColumns(columns: string[]): SplitSiteColumns {
     "3": "Train C",
     "4": "Train D",
   };
+  let lastDigit: "1" | "2" | "3" | "4" | null = null;
   for (const col of columns) {
     if (!col) continue;
     if (META_COLUMNS.has(col) || META_COLUMNS.has(col.trim())) continue;
     // Skip the timestamp/first-column header (often a stray date string).
     if (col === "Timestamp" || /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(col.trim())) continue;
-    const digit = siteColumnTrainDigit(col);
+    if (/^(train in service|train mode|trian mode|unnamed|_\d)/i.test(col.trim())) continue;
+    let digit = siteColumnTrainDigit(col);
+    // Typo tags like "(PI-x310)" sit inside a train block → inherit that train.
+    if (!digit && /\([A-Za-z]+-x\d/i.test(col)) digit = lastDigit;
+    if (digit) lastDigit = digit;
     if (digit) byTrain[digitToTrain[digit]].push(col);
     else general.push(col);
   }
