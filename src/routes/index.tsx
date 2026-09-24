@@ -328,8 +328,6 @@ function DashboardBody({
   siteError?: Error | null;
 }) {
   const [search, setSearch] = useState("");
-  const groups = useMemo(() => groupColumns(columns), [columns]);
-  const groupNames = Object.keys(groups);
 
   // -- Time frame (date range) applied to BOTH the train sheet and the
   //    Site Conditions sheet so the user can extract a consistent slice.
@@ -373,7 +371,26 @@ function DashboardBody({
   const siteGeneral = siteSplit?.general ?? [];
   const siteForTrain = siteSplit?.byTrain[train] ?? [];
 
-  // Build the full set of section tabs, including Site Conditions.
+  // Site sensors (general + this train's) are merged into the same systems as
+  // the train sheet — there is no separate "Site" section.
+  const siteSensors = useMemo(() => [...siteForTrain, ...siteGeneral], [siteForTrain, siteGeneral]);
+  const allSensors = useMemo(() => [...columns, ...siteSensors], [columns, siteSensors]);
+  const groups = useMemo(() => groupColumns(allSensors), [allSensors]);
+  const groupNames = Object.keys(groups);
+  const mergedData = useMemo(() => {
+    if (!filteredSite.length) return filteredData;
+    const keep = new Set(siteSensors);
+    const siteRowsTrim = filteredSite.map((r) => {
+      const o: Row = { __timestamp: r.__timestamp } as Row;
+      for (const k of Object.keys(r)) if (keep.has(k)) o[k] = r[k];
+      return o;
+    });
+    return [...filteredData, ...siteRowsTrim].sort(
+      (a, b) => (a.__timestamp?.getTime() ?? 0) - (b.__timestamp?.getTime() ?? 0),
+    );
+  }, [filteredData, filteredSite, siteSensors]);
+
+  // Build the full set of section tabs.
   type TabDef = {
     key: string;
     label: string;
@@ -389,24 +406,8 @@ function DashboardBody({
       sensors: groups[g],
       source: "train",
     }));
-    if (siteGeneral.length)
-      tabs.push({
-        key: "__site_general__",
-        label: "Site — General",
-        count: siteGeneral.length,
-        sensors: siteGeneral,
-        source: "site",
-      });
-    if (siteForTrain.length)
-      tabs.push({
-        key: "__site_train__",
-        label: `Site — ${train}`,
-        count: siteForTrain.length,
-        sensors: siteForTrain,
-        source: "site",
-      });
     return tabs;
-  }, [groupNames, groups, siteGeneral, siteForTrain, train]);
+  }, [groupNames, groups]);
 
   const [activeGroup, setActiveGroup] = useState(allTabs[0]?.key ?? "");
   if (activeGroup && !allTabs.find((t) => t.key === activeGroup)) {
@@ -419,11 +420,10 @@ function DashboardBody({
 
   const kpis = useMemo(
     () => [
-      ...buildKpis(filteredData, columns),
-      ...buildSiteKpis(filteredSite, siteColumns ?? [], train),
+      ...buildKpis(mergedData, allSensors),
       ...buildOilCoolerKpi(filteredData, filteredSite, train),
     ],
-    [filteredData, columns, filteredSite, siteColumns, train]
+    [filteredData, mergedData, allSensors, filteredSite, train]
   );
   const visibleKpis = useMemo(
     () => kpis.filter((k) => k.groups && k.groups.includes(activeGroup)),
@@ -444,7 +444,7 @@ function DashboardBody({
   const [chartSensors, setChartSensors] = useState<string[]>([]);
   const [rawAll, setRawAll] = useState(false);
   const activeTab = allTabs.find((t) => t.key === activeGroup);
-  const rawData = activeTab?.source === "site" ? filteredSite : filteredData;
+  const rawData = mergedData;
   const rawColumns = useMemo(() => {
     const pageSensors = activeTab?.sensors ?? [];
     if (rawAll || chartSensors.length === 0) return pageSensors;
@@ -596,7 +596,7 @@ function DashboardBody({
               <SectionView
                 key={g.key}
                 sensors={g.sensors}
-                data={g.source === "site" ? filteredSite : filteredData}
+                data={mergedData}
                 sectionName={g.label}
                 onSelectionChange={setChartSensors}
               />
@@ -850,7 +850,9 @@ function EffTrendDialog({
 
 function buildKpis(data: Row[], columns: string[]): Kpi[] {
   if (!data.length) return [];
-  const latest = data[data.length - 1];
+  // Last known value per column (rows from different sheets are interleaved).
+  const latest: Row = {} as Row;
+  for (const r of data) for (const k of Object.keys(r)) if (r[k] != null && r[k] !== "") latest[k] = r[k];
   const groups = groupColumns(columns);
   const pick = (re: RegExp): string | undefined =>
     columns.find((c) => re.test(c));
