@@ -941,6 +941,7 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
   for (const [groupName, groupCols] of Object.entries(groups)) {
     if (groupCols.length === 0) continue;
     if (groupName === "Axial Compressor (Air)") continue;
+    if (groupName === "Seal Gas") continue;
     const max = maxNum(groupCols);
     const min = minNum(groupCols);
     const avg = avgNum(groupCols);
@@ -952,8 +953,31 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
       items.push({ label: "Average Value", value: avg, column: "", unit: "", groups: [groupName] });
   }
 
-  // Axial Compressor efficiency is shown as a trend chart (icon on that page),
-  // not as a KPI card.
+  // Seal gas filter events: DP rises above 1 bar, then drops back to/below 1 bar
+  // → one cleaning/replacement event.
+  const sgFilter = columns.find((c) => /seal gas filter/i.test(c));
+  if (sgFilter) {
+    const pts = data
+      .filter((r) => typeof r[sgFilter] === "number" && Number.isFinite(r[sgFilter] as number) && r.__timestamp)
+      .map((r) => ({ t: (r.__timestamp as Date).getTime(), v: r[sgFilter] as number }))
+      .sort((a, b) => a.t - b.t);
+    const events: number[] = [];
+    let armed = false;
+    for (const p of pts) {
+      if (p.v > 1) armed = true;
+      else if (armed) {
+        events.push(p.t);
+        armed = false;
+      }
+    }
+    items.push({ label: "Filter Clean/Replace Events", value: events.length, column: sgFilter, unit: "times", groups: ["Seal Gas"] });
+    let avgDays: number | null = null;
+    if (events.length >= 2) {
+      avgDays = (events[events.length - 1] - events[0]) / (events.length - 1) / 86400000;
+    }
+    items.push({ label: "Avg Days Between Events", value: avgDays, column: sgFilter, unit: "days", groups: ["Seal Gas"] });
+  }
+
 
 
   // Tone heuristics
