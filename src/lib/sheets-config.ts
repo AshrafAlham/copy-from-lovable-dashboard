@@ -39,7 +39,7 @@ export const META_COLUMNS = new Set([
 // Section groupings — first matching rule wins. Order matters.
 export const SECTIONS: { name: string; match: (col: string) => boolean }[] = [
   { name: "Seal Gas", match: (c) => /(seal gas|seal-process|primary vent|buffer air|gas comp\. suction)/i.test(c) },
-  { name: "Fuel Gas", match: (c) => /(fuel gas|inlet [pt] \(|after reduction)/i.test(c) },
+  { name: "Fuel Gas", match: (c) => /(fuel gas|inlet [pt] \(|after reduction|intermediate stage)/i.test(c) },
   { name: "Utilities", match: (c) => /(water|instrument p|utility p|compressor [abc] discharge t|dryer|diesel|flare|filter in service)/i.test(c) },
   { name: "Lube Oil", match: (c) => /oil/i.test(c) },
   { name: "Axial Compressor (Air)", match: (c) => /(axial compressor|air |air press|air temp|filters|cooling air|plenum|compartment)/i.test(c) },
@@ -51,7 +51,7 @@ export const SECTIONS: { name: string; match: (col: string) => boolean }[] = [
   { name: "Gearbox Bearings — Vibration", match: (c) => /gearbox.*bearing.*vibration/i.test(c) },
   { name: "Wheelspace", match: (c) => /wheelspace/i.test(c) },
   { name: "Exhaust", match: (c) => /(exhaust|spread)/i.test(c) },
-  { name: "Control", match: (c) => /(srv|gcv|igv|fsr|nozzle|intermediate stage)/i.test(c) },
+  { name: "Control", match: (c) => /(srv|gcv|igv|fsr|nozzle)/i.test(c) },
   { name: "Other", match: () => true },
 ];
 
