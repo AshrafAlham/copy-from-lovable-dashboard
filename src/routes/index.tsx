@@ -444,7 +444,33 @@ function DashboardBody({
   const [chartSensors, setChartSensors] = useState<string[]>([]);
   const [rawAll, setRawAll] = useState(false);
   const activeTab = allTabs.find((t) => t.key === activeGroup);
-  const rawData = mergedData;
+  // Readings are taken twice a day (09:00 and 21:00). Snap every row (train or
+  // site sheet) to its nearest shift slot and merge rows sharing a slot.
+  const rawData = useMemo(() => {
+    const slots = new Map<number, Row>();
+    for (const r of mergedData) {
+      const t = r.__timestamp;
+      if (!t) continue;
+      const d = new Date(t);
+      const h = d.getHours();
+      if (h < 3) {
+        d.setDate(d.getDate() - 1);
+        d.setHours(21, 0, 0, 0);
+      } else if (h < 15) d.setHours(9, 0, 0, 0);
+      else d.setHours(21, 0, 0, 0);
+      const key = d.getTime();
+      const slot = slots.get(key) ?? ({ __timestamp: d } as Row);
+      for (const k of Object.keys(r)) {
+        if (k === "__timestamp") continue;
+        const v = r[k];
+        if (v !== null && v !== undefined && v !== "") slot[k] = v;
+      }
+      slots.set(key, slot);
+    }
+    return [...slots.values()].sort(
+      (a, b) => (a.__timestamp?.getTime() ?? 0) - (b.__timestamp?.getTime() ?? 0),
+    );
+  }, [mergedData]);
   const rawColumns = useMemo(() => {
     const pageSensors = activeTab?.sensors ?? [];
     if (rawAll || chartSensors.length === 0) return pageSensors;
