@@ -964,8 +964,8 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
     const events: number[] = [];
     let armed = false;
     for (const p of pts) {
-      if (p.v > 1) armed = true;
-      else if (armed) {
+      if (p.v >= 1) armed = true;
+      else if (armed && p.v < 1) {
         events.push(p.t);
         armed = false;
       }
