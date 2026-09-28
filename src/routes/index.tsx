@@ -953,29 +953,32 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
       items.push({ label: "Average Value", value: avg, column: "", unit: "", groups: [groupName] });
   }
 
-  // Seal gas filter events: DP rises above 1 bar, then drops back to/below 1 bar
-  // → one cleaning/replacement event.
+  // Seal gas filter events: DP builds up (peak ≥ 0.4 bar) then drops sharply
+  // to a clean-filter level (≤ 0.25 bar and ≤ half the peak) → one event.
   const sgFilter = columns.find((c) => /seal gas filter/i.test(c));
   if (sgFilter) {
     const pts = data
-      .filter((r) => typeof r[sgFilter] === "number" && Number.isFinite(r[sgFilter] as number) && r.__timestamp)
+      .filter((r) => typeof r[sgFilter] === "number" && Number.isFinite(r[sgFilter] as number) && (r[sgFilter] as number) >= 0 && r.__timestamp)
       .map((r) => ({ t: (r.__timestamp as Date).getTime(), v: r[sgFilter] as number }))
       .sort((a, b) => a.t - b.t);
     const events: number[] = [];
-    let armed = false;
+    let peak = 0;
     for (const p of pts) {
-      if (p.v >= 1) armed = true;
-      else if (armed && p.v < 1) {
+      if (p.v > peak) peak = p.v;
+      else if (peak >= 0.4 && p.v <= 0.25 && p.v <= peak * 0.5) {
         events.push(p.t);
-        armed = false;
+        peak = p.v;
       }
     }
     items.push({ label: "Filter Clean/Replace Events", value: events.length, column: sgFilter, unit: "times", groups: ["Seal Gas"] });
+    // Working days = distinct days the train had readings (was running).
     let avgDays: number | null = null;
     if (events.length >= 2) {
-      avgDays = (events[events.length - 1] - events[0]) / (events.length - 1) / 86400000;
+      const dayKey = (t: number) => Math.floor(t / 86400000);
+      const workDays = new Set(pts.filter((p) => p.t > events[0] && p.t <= events[events.length - 1]).map((p) => dayKey(p.t)));
+      avgDays = workDays.size / (events.length - 1);
     }
-    items.push({ label: "Avg Days Between Events", value: avgDays, column: sgFilter, unit: "days", groups: ["Seal Gas"] });
+    items.push({ label: "Avg Working Days Between Events", value: avgDays, column: sgFilter, unit: "days", groups: ["Seal Gas"] });
   }
 
 
