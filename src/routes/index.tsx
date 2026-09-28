@@ -953,8 +953,7 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
       items.push({ label: "Average Value", value: avg, column: "", unit: "", groups: [groupName] });
   }
 
-  // Seal gas filter events: DP builds up (peak ≥ 0.4 bar) then drops sharply
-  // to a clean-filter level (≤ 0.25 bar and ≤ half the peak) → one event.
+  // Seal gas filter events: DP builds up to ≥ 1 bar, then falls to ≤ 0.9 bar → one event.
   const sgFilter = columns.find((c) => /seal gas filter/i.test(c));
   if (sgFilter) {
     const pts = data
@@ -962,12 +961,12 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
       .map((r) => ({ t: (r.__timestamp as Date).getTime(), v: r[sgFilter] as number }))
       .sort((a, b) => a.t - b.t);
     const events: number[] = [];
-    let peak = 0;
+    let armed = false;
     for (const p of pts) {
-      if (p.v > peak) peak = p.v;
-      else if (peak >= 0.4 && p.v <= 0.25 && p.v <= peak * 0.5) {
+      if (p.v >= 1) armed = true;
+      else if (armed && p.v <= 0.9) {
         events.push(p.t);
-        peak = p.v;
+        armed = false;
       }
     }
     items.push({ label: "Filter Clean/Replace Events", value: events.length, column: sgFilter, unit: "times", groups: ["Seal Gas"] });
