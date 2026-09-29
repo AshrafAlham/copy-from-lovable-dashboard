@@ -927,9 +927,6 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
   ];
 
   const items: Kpi[] = [
-    { label: "Lube Oil P", value: getNum(latest, lubeP), column: lubeP ?? "", unit: "bar", groups: ["Lube Oil"] },
-    { label: "Lube Oil T", value: getNum(latest, lubeT), column: lubeT ?? "", unit: "°C", groups: ["Lube Oil"] },
-    { label: "Oil Tank T", value: getNum(latest, oilTank), column: oilTank ?? "", unit: "°C", groups: ["Lube Oil"] },
     { label: "Exhaust Mean", value: getNum(latest, exhaustMean), column: exhaustMean ?? "", unit: "°C", groups: ["Exhaust"] },
     { label: "Max Bearing T", value: maxNum(tempCols), column: "", unit: "°C", groups: BEARING_TEMP_GROUPS },
     { label: "Max Vibration", value: maxNum(vibCols), column: "", unit: "mm/s", groups: VIB_GROUPS },
@@ -942,6 +939,7 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
     if (groupCols.length === 0) continue;
     if (groupName === "Axial Compressor (Air)") continue;
     if (groupName === "Seal Gas") continue;
+    if (groupName === "Lube Oil") continue;
     if (groupName === "Fuel Gas") continue;
     const max = maxNum(groupCols);
     const min = minNum(groupCols);
@@ -1003,6 +1001,59 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
     }
     items.push({ label: "Avg Working Days Between Events", value: avgDays, column: sgFilter, unit: "days", groups: ["Seal Gas"] });
   }
+
+  // ---- Lube Oil cards ----
+  const LO = ["Lube Oil"];
+  const loFilter = columns.find((c) => /p on lube oil filters/i.test(c));
+  if (loFilter) {
+    const pts = data
+      .filter((r) => typeof r[loFilter] === "number" && Number.isFinite(r[loFilter] as number) && r.__timestamp)
+      .map((r) => ({ t: (r.__timestamp as Date).getTime(), v: r[loFilter] as number }))
+      .sort((a, b) => a.t - b.t);
+    const events: number[] = [];
+    let armed = false;
+    for (const p of pts) {
+      if (p.v >= 1.5) armed = true;
+      else if (armed && p.v < 0.9) {
+        events.push(p.t);
+        armed = false;
+      }
+    }
+    items.push({ label: "Lube Oil Filter Replace Events", value: events.length, column: loFilter, unit: "times", groups: LO });
+    let avgDays: number | null = null;
+    if (events.length >= 2) {
+      const dayKey = (t: number) => Math.floor(t / 86400000);
+      const workDays = new Set(pts.filter((p) => p.t > events[0] && p.t <= events[events.length - 1]).map((p) => dayKey(p.t)));
+      avgDays = workDays.size / (events.length - 1);
+    }
+    items.push({ label: "Avg Working Days Between Filter Events", value: avgDays, column: loFilter, unit: "days", groups: LO });
+  }
+
+  // Header minimum pressure (PT-x217A/B/C) and hours spent at it (each reading ≈ 12 h shift).
+  const hdrCols = columns.filter((c) => /\(PT-\d217[ABC]\)/i.test(c));
+  const hdrUse = hdrCols.length ? hdrCols : columns.filter((c) => /lube oil header p/i.test(c));
+  const hdrMin = minNum(hdrUse);
+  if (hdrMin !== null) {
+    items.push({ label: "Lube Oil Header Min Pressure", value: hdrMin, column: "", unit: "bar", groups: LO });
+    let n = 0;
+    for (const r of data)
+      if (hdrUse.some((c) => typeof r[c] === "number" && Math.abs((r[c] as number) - hdrMin) < 1e-9)) n++;
+    items.push({ label: "Hours at Header Min Pressure", value: n * 12, column: "", unit: "h", groups: LO });
+  }
+
+  const lvlSite = columns.filter((c) => /\(LG-\d700\)/i.test(c));
+  const lvlCols = lvlSite.length ? lvlSite : columns.filter((c) => /oil level in the main tank/i.test(c));
+  const push = (label: string, value: number | null, unit: string) => {
+    if (value !== null) items.push({ label, value, column: "", unit, groups: LO });
+  };
+  push("Min Lube Oil Tank Level", minNum(lvlCols), "");
+  push("Max Turbine Bearing Return T", maxNum(columns.filter((c) => /oil return temp\. from bearing/i.test(c))), "°C");
+  push("Max Gearbox Bearing Return T", maxNum(columns.filter((c) => /oil return t from gearbox/i.test(c))), "°C");
+  push("Max Compressor Bearing Return T", maxNum(columns.filter((c) => /oil return t from bearing/i.test(c))), "°C");
+  push("Max Lube Oil Tank Pressure", maxNum(columns.filter((c) => /oil p in the main tank/i.test(c))), "bar");
+  push("Avg Hydraulic Oil Supply P", avgNum(columns.filter((c) => /hydraulic oil supply/i.test(c))), "bar");
+  push("Avg Control Oil Supply P", avgNum(columns.filter((c) => /control oil header/i.test(c))), "bar");
+
 
 
 
