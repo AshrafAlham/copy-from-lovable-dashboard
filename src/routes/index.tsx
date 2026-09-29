@@ -942,6 +942,7 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
     if (groupCols.length === 0) continue;
     if (groupName === "Axial Compressor (Air)") continue;
     if (groupName === "Seal Gas") continue;
+    if (groupName === "Fuel Gas") continue;
     const max = maxNum(groupCols);
     const min = minNum(groupCols);
     const avg = avgNum(groupCols);
@@ -953,32 +954,31 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
       items.push({ label: "Average Value", value: avg, column: "", unit: "", groups: [groupName] });
   }
 
-  // Seal gas filter events: DP builds up to ≥ 0.6 bar, then falls to ≤ 0.4 bar → one event.
-  const sgFilter = columns.find((c) => /seal gas filter/i.test(c));
-  if (sgFilter) {
-    const pts = data
-      .filter((r) => typeof r[sgFilter] === "number" && Number.isFinite(r[sgFilter] as number) && (r[sgFilter] as number) >= 0 && r.__timestamp)
-      .map((r) => ({ t: (r.__timestamp as Date).getTime(), v: r[sgFilter] as number }))
-      .sort((a, b) => a.t - b.t);
-    const events: number[] = [];
-    let armed = false;
-    for (const p of pts) {
-      if (p.v >= 0.6) armed = true;
-      else if (armed && p.v <= 0.4) {
-        events.push(p.t);
-        armed = false;
-      }
+  // Fuel Gas cards
+  const srvPos = pick(/srv position/i);
+  const gcvPos = pick(/gcv position/i);
+  const fgUp = pick(/fuel gas p upstream srv/i);
+  const fgMid = pick(/intermediate stage p/i);
+  const fgDown = pick(/fuel gas p downstream gcv/i);
+  const avgDiff = (a?: string, b?: string): number | null => {
+    if (!a || !b) return null;
+    const d: number[] = [];
+    for (const r of data) {
+      const x = r[a], y = r[b];
+      if (typeof x === "number" && typeof y === "number" && Number.isFinite(x) && Number.isFinite(y)) d.push(x - y);
     }
-    items.push({ label: "Filter Clean/Replace Events", value: events.length, column: sgFilter, unit: "times", groups: ["Seal Gas"] });
-    // Working days = distinct days the train had readings (was running).
-    let avgDays: number | null = null;
-    if (events.length >= 2) {
-      const dayKey = (t: number) => Math.floor(t / 86400000);
-      const workDays = new Set(pts.filter((p) => p.t > events[0] && p.t <= events[events.length - 1]).map((p) => dayKey(p.t)));
-      avgDays = workDays.size / (events.length - 1);
-    }
-    items.push({ label: "Avg Working Days Between Events", value: avgDays, column: sgFilter, unit: "days", groups: ["Seal Gas"] });
-  }
+    return d.length ? d.reduce((s, v) => s + v, 0) / d.length : null;
+  };
+  const fg: Kpi[] = [
+    { label: "Max SRV Position", value: srvPos ? maxNum([srvPos]) : null, column: srvPos ?? "", unit: "%", groups: ["Fuel Gas"] },
+    { label: "Max GCV Position", value: gcvPos ? maxNum([gcvPos]) : null, column: gcvPos ?? "", unit: "%", groups: ["Fuel Gas"] },
+    { label: "Avg DP Across SRV", value: avgDiff(fgUp, fgMid), column: "", unit: "bar", groups: ["Fuel Gas"] },
+    { label: "Avg DP Across GCV", value: avgDiff(fgMid, fgDown), column: "", unit: "bar", groups: ["Fuel Gas"] },
+    { label: "Avg Burned Fuel P (downstream GCV)", value: fgDown ? avgNum([fgDown]) : null, column: fgDown ?? "", unit: "bar", groups: ["Fuel Gas"] },
+  ];
+  items.push(...fg.filter((k) => k.value !== null));
+
+
 
 
 
