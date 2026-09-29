@@ -39,7 +39,7 @@ export const META_COLUMNS = new Set([
 // Section groupings — first matching rule wins. Order matters.
 export const SECTIONS: { name: string; match: (col: string) => boolean }[] = [
   { name: "Seal Gas", match: (c) => /(seal gas|seal-process|primary vent|buffer air|gas comp\. suction)/i.test(c) },
-  { name: "Fuel Gas", match: (c) => /(fuel gas|inlet [pt] \(|after reduction|intermediate stage)/i.test(c) },
+  { name: "Fuel Gas", match: (c) => /(fuel gas|inlet [pt] \(|after reduction|intermediate stage|srv|gcv)/i.test(c) },
   { name: "Utilities", match: (c) => /(water|instrument p|utility p|compressor [abc] discharge t|dryer|diesel|flare|filter in service)/i.test(c) },
   { name: "Lube Oil", match: (c) => /oil/i.test(c) },
   { name: "Axial Compressor (Air)", match: (c) => /(axial compressor|air |air press|air temp|filters|cooling air|plenum|compartment)/i.test(c) },
