@@ -978,6 +978,32 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
   ];
   items.push(...fg.filter((k) => k.value !== null));
 
+  // Seal gas filter events: DP builds up to ≥ 0.6 bar, then falls to ≤ 0.4 bar → one event.
+  const sgFilter = columns.find((c) => /seal gas filter/i.test(c));
+  if (sgFilter) {
+    const pts = data
+      .filter((r) => typeof r[sgFilter] === "number" && Number.isFinite(r[sgFilter] as number) && (r[sgFilter] as number) >= 0 && r.__timestamp)
+      .map((r) => ({ t: (r.__timestamp as Date).getTime(), v: r[sgFilter] as number }))
+      .sort((a, b) => a.t - b.t);
+    const events: number[] = [];
+    let armed = false;
+    for (const p of pts) {
+      if (p.v >= 0.6) armed = true;
+      else if (armed && p.v <= 0.4) {
+        events.push(p.t);
+        armed = false;
+      }
+    }
+    items.push({ label: "Filter Clean/Replace Events", value: events.length, column: sgFilter, unit: "times", groups: ["Seal Gas"] });
+    let avgDays: number | null = null;
+    if (events.length >= 2) {
+      const dayKey = (t: number) => Math.floor(t / 86400000);
+      const workDays = new Set(pts.filter((p) => p.t > events[0] && p.t <= events[events.length - 1]).map((p) => dayKey(p.t)));
+      avgDays = workDays.size / (events.length - 1);
+    }
+    items.push({ label: "Avg Working Days Between Events", value: avgDays, column: sgFilter, unit: "days", groups: ["Seal Gas"] });
+  }
+
 
 
 
