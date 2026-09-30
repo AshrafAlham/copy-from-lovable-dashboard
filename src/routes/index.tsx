@@ -1050,7 +1050,7 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
   push("Max Turbine Bearing Return T", maxNum(columns.filter((c) => /oil return temp\. from bearing/i.test(c))), "°C");
   push("Max Gearbox Bearing Return T", maxNum(columns.filter((c) => /oil return t from gearbox/i.test(c))), "°C");
   push("Max Compressor Bearing Return T", maxNum(columns.filter((c) => /oil return t from bearing/i.test(c))), "°C");
-  push("Max Lube Oil Tank Pressure", maxNum(columns.filter((c) => /oil p in the main tank/i.test(c))), "bar");
+  push("Max Lube Oil Tank Pressure", maxNum(columns.filter((c) => /oil p in the main tank/i.test(c))), "mmH₂O");
   push("Avg Hydraulic Oil Supply P", avgNum(columns.filter((c) => /hydraulic oil supply/i.test(c))), "bar");
   push("Avg Control Oil Supply P", avgNum(columns.filter((c) => /control oil header/i.test(c))), "bar");
 
@@ -1225,6 +1225,30 @@ function buildOilCoolerKpi(
       column: "",
       unit: "%",
       tone,
+      groups: ["Lube Oil"],
+    });
+  }
+  // Average ΔT (inlet − outlet) per cooler across rows where it was in service.
+  const dt: Record<string, { sum: number; n: number }> = { A: { sum: 0, n: 0 }, B: { sum: 0, n: 0 }, C: { sum: 0, n: 0 } };
+  for (const row of siteData) {
+    const svcCol = findCol(row, inSvcRe);
+    if (!svcCol) continue;
+    const s = row[svcCol] == null ? "" : String(row[svcCol]).trim();
+    const label = codeToLabel[s] ?? (s ? s.toUpperCase() : "");
+    if (!(label in dt)) continue;
+    const inlet = numAt(row, inletRe);
+    const outlet = numAt(row, outletRe);
+    if (inlet === null || outlet === null) continue;
+    dt[label].sum += inlet - outlet;
+    dt[label].n++;
+  }
+  for (const label of ["A", "B", "C"] as const) {
+    if (!dt[label].n) continue;
+    out.push({
+      label: `Oil Cooler ${label} Avg ΔT${currentSvc === label ? " (in service)" : ""}`,
+      value: dt[label].sum / dt[label].n,
+      column: "",
+      unit: "°C",
       groups: ["Lube Oil"],
     });
   }
