@@ -1096,7 +1096,7 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
   const AX = ["Axial Compressor (Air)"];
   const airFilt = columns.filter((c) => /p on air filters/i.test(c));
   const afMax = maxNum(airFilt);
-  if (afMax !== null) items.push({ label: "Max DP on Air Filters", value: afMax, column: airFilt[0], unit: "", groups: AX });
+  if (afMax !== null) items.push({ label: "Max DP on Air Filters", value: afMax, column: airFilt[0], unit: "mmH₂O", groups: AX });
   {
     const isP = (c: string) => /\(\s*P[A-Z]*-/i.test(c) || (!/\([A-Z]+-/i.test(c) && /press/i.test(c));
     const sP = columns.filter((c) => /axial compressor suction/i.test(c) && isP(c));
@@ -1113,7 +1113,7 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
       if (Number.isFinite(pr) && pr > 1 && pr < 30) ratios.push(pr);
     }
     if (ratios.length)
-      items.push({ label: "Avg Compressor Pressure Ratio", value: ratios.reduce((a, b) => a + b, 0) / ratios.length, column: "", unit: "", groups: AX });
+      items.push({ label: "Avg Compressor Pressure Ratio", value: ratios.reduce((a, b) => a + b, 0) / ratios.length, column: "", unit: "bar", groups: AX });
   }
 
 
