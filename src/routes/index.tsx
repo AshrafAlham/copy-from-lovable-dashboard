@@ -1092,6 +1092,30 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
     items.push({ label: `Air Dryer ${L} Max Dew Point (in service)`, value: Math.max(...vals), column: dew, unit: "°C", groups: UT });
   }
 
+  // ---- Axial Compressor extra cards ----
+  const AX = ["Axial Compressor (Air)"];
+  const airFilt = columns.filter((c) => /p on air filters/i.test(c));
+  const afMax = maxNum(airFilt);
+  if (afMax !== null) items.push({ label: "Max DP on Air Filters", value: afMax, column: airFilt[0], unit: "", groups: AX });
+  {
+    const isP = (c: string) => /\(\s*P[A-Z]*-/i.test(c) || (!/\([A-Z]+-/i.test(c) && /press/i.test(c));
+    const sP = columns.filter((c) => /axial compressor suction/i.test(c) && isP(c));
+    const dP = columns.filter((c) => /axial compressor discharge/i.test(c) && isP(c));
+    const rowAvg = (r: Row, cs: string[]) => {
+      const v = cs.map((c) => r[c]).filter((x): x is number => typeof x === "number" && Number.isFinite(x));
+      return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+    };
+    const ratios: number[] = [];
+    for (const r of data) {
+      const p1 = rowAvg(r, sP), p2 = rowAvg(r, dP);
+      if (p1 == null || p2 == null || p1 <= 0) continue;
+      const pr = (p2 + 1.01325) / p1; // P2 gauge → absolute, P1 already absolute
+      if (Number.isFinite(pr) && pr > 1 && pr < 30) ratios.push(pr);
+    }
+    if (ratios.length)
+      items.push({ label: "Avg Compressor Pressure Ratio", value: ratios.reduce((a, b) => a + b, 0) / ratios.length, column: "", unit: "", groups: AX });
+  }
+
 
 
 
