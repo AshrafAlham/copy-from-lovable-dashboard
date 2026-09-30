@@ -941,6 +941,7 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
     if (groupName === "Seal Gas") continue;
     if (groupName === "Lube Oil") continue;
     if (groupName === "Fuel Gas") continue;
+    if (groupName === "Utilities") continue;
     const max = maxNum(groupCols);
     const min = minNum(groupCols);
     const avg = avgNum(groupCols);
