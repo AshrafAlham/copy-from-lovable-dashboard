@@ -1055,6 +1055,43 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
   push("Avg Hydraulic Oil Supply P", avgNum(columns.filter((c) => /hydraulic oil supply/i.test(c))), "bar");
   push("Avg Control Oil Supply P", avgNum(columns.filter((c) => /control oil header/i.test(c))), "bar");
 
+  // ---- Utilities cards ----
+  const UT = ["Utilities"];
+  const series = (col: string) =>
+    data
+      .filter((r) => typeof r[col] === "number" && Number.isFinite(r[col] as number) && r.__timestamp)
+      .map((r) => ({ t: (r.__timestamp as Date).getTime(), v: r[col] as number, row: r }))
+      .sort((a, b) => a.t - b.t);
+  // Each excursion counts once: entering the condition from a normal state = 1 event.
+  const countExcursions = (col: string, bad: (v: number) => boolean) => {
+    let n = 0, inBad = false;
+    for (const p of series(col)) {
+      if (bad(p.v)) { if (!inBad) n++; inBad = true; } else inBad = false;
+    }
+    return n;
+  };
+  const instAir = columns.find((c) => /instrument p/i.test(c));
+  if (instAir)
+    items.push({ label: "Instrument Air Low-P Events (< 6 bar)", value: countExcursions(instAir, (v) => v < 6), column: instAir, unit: "times", groups: UT });
+  for (const L of ["A", "B", "C"]) {
+    const col = columns.find((c) => new RegExp(`compressor ${L} discharge t`, "i").test(c));
+    if (!col) continue;
+    const mx = maxNum([col]);
+    if (mx !== null) items.push({ label: `Air Compressor ${L} Max Discharge T`, value: mx, column: col, unit: "°C", groups: UT });
+    items.push({ label: `Air Compressor ${L} High Discharge T Events (> 95 °C)`, value: countExcursions(col, (v) => v > 95), column: col, unit: "times", groups: UT });
+  }
+  for (const L of ["A", "B"]) {
+    const dew = columns.find((c) => new RegExp(`air dryer ${L} dew point`, "i").test(c));
+    const st = columns.find((c) => new RegExp(`air dryer ${L} status`, "i").test(c));
+    if (!dew) continue;
+    const vals = series(dew)
+      .filter((p) => !st || String(p.row[st] ?? "").trim().toUpperCase() === "ON")
+      .map((p) => p.v);
+    if (!vals.length) continue;
+    items.push({ label: `Air Dryer ${L} Avg Dew Point (in service)`, value: vals.reduce((a, b) => a + b, 0) / vals.length, column: dew, unit: "°C", groups: UT });
+    items.push({ label: `Air Dryer ${L} Max Dew Point (in service)`, value: Math.max(...vals), column: dew, unit: "°C", groups: UT });
+  }
+
 
 
 
