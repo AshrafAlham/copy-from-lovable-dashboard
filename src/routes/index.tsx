@@ -928,7 +928,6 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
 
   const items: Kpi[] = [
     { label: "Exhaust Mean", value: getNum(latest, exhaustMean), column: exhaustMean ?? "", unit: "°C", groups: ["Exhaust"] },
-    { label: "Max Vibration", value: maxNum(vibCols), column: "", unit: "mm/s", groups: VIB_GROUPS },
     { label: "FSR", value: getNum(latest, fsr), column: fsr ?? "", unit: "%", groups: ["Control"] },
   ].filter((k) => k.value !== null);
 
@@ -941,7 +940,7 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
     if (groupName === "Lube Oil") continue;
     if (groupName === "Fuel Gas") continue;
     if (groupName === "Utilities") continue;
-    if (BEARING_TEMP_GROUPS.includes(groupName)) continue;
+    if (BEARING_TEMP_GROUPS.includes(groupName) || VIB_GROUPS.includes(groupName)) continue;
     const max = maxNum(groupCols);
     const min = minNum(groupCols);
     const avg = avgNum(groupCols);
@@ -951,6 +950,44 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
       items.push({ label: "Min Value", value: min, column: "", unit: "", groups: [groupName] });
     if (avg !== null)
       items.push({ label: "Average Value", value: avg, column: "", unit: "", groups: [groupName] });
+  }
+
+  // Bearing vibration cards: highest vibration with bearing name, max |VX − VY| per radial bearing.
+  for (const groupName of VIB_GROUPS) {
+    const gcols = groups[groupName] ?? [];
+    if (!gcols.length) continue;
+    const letter = (c: string) => c.match(/\(([A-Z])\)\s*$/)?.[1];
+    let best: { v: number; c: string } | null = null;
+    for (const row of data)
+      for (const c of gcols) {
+        const v = row[c];
+        if (typeof v === "number" && Number.isFinite(v) && (!best || v > best.v)) best = { v, c };
+      }
+    if (best)
+      items.push({ label: `Highest Bearing Vibration (Bearing ${letter(best.c) ?? "?"})`, value: best.v, column: "", unit: "mm/s", groups: [groupName] });
+    // Pair radial X/Y probes by tag, e.g. (XT-1920 X) + (XT-1920 Y).
+    const pairs: Record<string, { x?: string; y?: string }> = {};
+    for (const c of gcols) {
+      if (!/radial/i.test(c)) continue;
+      const m = c.match(/\(([A-Z]+-\d+)\s*([XY])\)/i);
+      if (!m) continue;
+      const p = (pairs[m[1]] ??= {});
+      if (m[2].toUpperCase() === "X") p.x = c;
+      else p.y = c;
+    }
+    let diff: { v: number; name: string } | null = null;
+    for (const [tag, p] of Object.entries(pairs)) {
+      if (!p.x || !p.y) continue;
+      const name = `${tag}, Bearing ${letter(p.x) ?? "?"}/${letter(p.y) ?? "?"}`;
+      for (const row of data) {
+        const vx = row[p.x], vy = row[p.y];
+        if (typeof vx !== "number" || typeof vy !== "number" || !Number.isFinite(vx) || !Number.isFinite(vy)) continue;
+        const d = Math.abs(vx - vy);
+        if (!diff || d > diff.v) diff = { v: d, name };
+      }
+    }
+    if (diff)
+      items.push({ label: `Max X-Y Vibration Diff (${diff.name})`, value: diff.v, column: "", unit: "mm/s", groups: [groupName] });
   }
 
   // Bearing temperature cards: highest axial / radial with bearing name, max spread.
