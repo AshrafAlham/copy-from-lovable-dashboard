@@ -1011,21 +1011,22 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
     const rad = highest(gcols.filter((c) => /radial/i.test(c)));
     if (ax) items.push({ label: `Highest Axial Bearing T (${bearingName(ax.c)})`, value: ax.v, column: "", unit: "°C", groups: [groupName] });
     if (rad) items.push({ label: `Highest Radial Bearing T (${bearingName(rad.c)})`, value: rad.v, column: "", unit: "°C", groups: [groupName] });
-    let spread: { v: number; hi: string; lo: string } | null = null;
-    for (const row of data) {
-      let hi: { v: number; c: string } | null = null;
-      let lo: { v: number; c: string } | null = null;
+    // Spread per bearing over time: Tmax − Tmin of the same bearing.
+    const perBearing = new Map<string, { max: number; min: number }>();
+    for (const row of data)
       for (const c of gcols) {
         const v = row[c];
         if (typeof v !== "number" || !Number.isFinite(v) || v <= 0) continue;
-        if (!hi || v > hi.v) hi = { v, c };
-        if (!lo || v < lo.v) lo = { v, c };
+        const name = bearingName(c);
+        const cur = perBearing.get(name);
+        if (!cur) perBearing.set(name, { max: v, min: v });
+        else { if (v > cur.max) cur.max = v; if (v < cur.min) cur.min = v; }
       }
-      if (hi && lo && hi.c !== lo.c && (!spread || hi.v - lo.v > spread.v))
-        spread = { v: hi.v - lo.v, hi: bearingName(hi.c), lo: bearingName(lo.c) };
-    }
+    let spread: { v: number; name: string } | null = null;
+    for (const [name, { max, min }] of perBearing)
+      if (!spread || max - min > spread.v) spread = { v: max - min, name };
     if (spread)
-      items.push({ label: `Max Bearing T Spread (${spread.hi} − ${spread.lo})`, value: spread.v, column: "", unit: "°C", groups: [groupName] });
+      items.push({ label: `Max Bearing T Spread (${spread.name} − ${spread.name})`, value: spread.v, column: "", unit: "°C", groups: [groupName] });
   }
 
   // Fuel Gas cards
