@@ -928,7 +928,6 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
 
   const items: Kpi[] = [
     { label: "Exhaust Mean", value: getNum(latest, exhaustMean), column: exhaustMean ?? "", unit: "°C", groups: ["Exhaust"] },
-    { label: "Max Bearing T", value: maxNum(tempCols), column: "", unit: "°C", groups: BEARING_TEMP_GROUPS },
     { label: "Max Vibration", value: maxNum(vibCols), column: "", unit: "mm/s", groups: VIB_GROUPS },
     { label: "FSR", value: getNum(latest, fsr), column: fsr ?? "", unit: "%", groups: ["Control"] },
   ].filter((k) => k.value !== null);
@@ -942,6 +941,7 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
     if (groupName === "Lube Oil") continue;
     if (groupName === "Fuel Gas") continue;
     if (groupName === "Utilities") continue;
+    if (BEARING_TEMP_GROUPS.includes(groupName)) continue;
     const max = maxNum(groupCols);
     const min = minNum(groupCols);
     const avg = avgNum(groupCols);
@@ -951,6 +951,44 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
       items.push({ label: "Min Value", value: min, column: "", unit: "", groups: [groupName] });
     if (avg !== null)
       items.push({ label: "Average Value", value: avg, column: "", unit: "", groups: [groupName] });
+  }
+
+  // Bearing temperature cards: highest axial / radial with bearing name, max spread.
+  const bearingName = (c: string) => {
+    const m = c.match(/\(([A-Z])\)\s*$/);
+    return m ? `Bearing ${m[1]}` : c;
+  };
+  for (const groupName of BEARING_TEMP_GROUPS) {
+    const gcols = groups[groupName] ?? [];
+    if (!gcols.length) continue;
+    const highest = (cols: string[]) => {
+      let best: { v: number; c: string } | null = null;
+      for (const row of data)
+        for (const c of cols) {
+          const v = row[c];
+          if (typeof v === "number" && Number.isFinite(v) && (!best || v > best.v)) best = { v, c };
+        }
+      return best;
+    };
+    const ax = highest(gcols.filter((c) => /axial/i.test(c)));
+    const rad = highest(gcols.filter((c) => /radial/i.test(c)));
+    if (ax) items.push({ label: `Highest Axial Bearing T (${bearingName(ax.c)})`, value: ax.v, column: "", unit: "°C", groups: [groupName] });
+    if (rad) items.push({ label: `Highest Radial Bearing T (${bearingName(rad.c)})`, value: rad.v, column: "", unit: "°C", groups: [groupName] });
+    let spread: { v: number; hi: string; lo: string } | null = null;
+    for (const row of data) {
+      let hi: { v: number; c: string } | null = null;
+      let lo: { v: number; c: string } | null = null;
+      for (const c of gcols) {
+        const v = row[c];
+        if (typeof v !== "number" || !Number.isFinite(v) || v <= 0) continue;
+        if (!hi || v > hi.v) hi = { v, c };
+        if (!lo || v < lo.v) lo = { v, c };
+      }
+      if (hi && lo && hi.c !== lo.c && (!spread || hi.v - lo.v > spread.v))
+        spread = { v: hi.v - lo.v, hi: bearingName(hi.c), lo: bearingName(lo.c) };
+    }
+    if (spread)
+      items.push({ label: `Max Bearing T Spread (${spread.hi} − ${spread.lo})`, value: spread.v, column: "", unit: "°C", groups: [groupName] });
   }
 
   // Fuel Gas cards
