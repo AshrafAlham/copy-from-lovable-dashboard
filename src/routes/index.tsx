@@ -928,7 +928,6 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
   ];
 
   const items: Kpi[] = [
-    { label: "Exhaust Mean", value: getNum(latest, exhaustMean), column: exhaustMean ?? "", unit: "°C", groups: ["Exhaust"] },
     { label: "FSR", value: getNum(latest, fsr), column: fsr ?? "", unit: "%", groups: ["Control"] },
   ].filter((k) => k.value !== null);
 
@@ -957,7 +956,29 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
       if (s1.length) items.push({ label: "Max Stage 1 Wheelspace T", value: Math.max(...s1), column: "", unit: "°C", groups: [groupName] });
       if (s2.length) items.push({ label: "Max Stage 2 Wheelspace T", value: Math.max(...s2), column: "", unit: "°C", groups: [groupName] });
       if (m1 !== null && m2 !== null)
-        items.push({ label: "Stage-to-Stage ΔT (median S2 − median S1)", value: m2 - m1, column: "", unit: "°C", groups: [groupName] });
+        items.push({ label: "Stage-to-Stage ΔT (median S1 − median S2)", value: m1 - m2, column: "", unit: "°C", groups: [groupName] });
+      continue;
+    }
+    if (groupName === "Exhaust") {
+      const tcols = groupCols.filter((c) => /exhaust temperature\s*\(([A-Z])\)/i.test(c));
+      let best: { v: number; c: string } | null = null;
+      for (const row of data)
+        for (const c of tcols) {
+          const v = row[c];
+          if (typeof v === "number" && Number.isFinite(v) && (!best || v > best.v)) best = { v, c };
+        }
+      if (best) {
+        const loc = best.c.match(/exhaust temperature\s*\(([A-Z])\)/i)?.[1] ?? "?";
+        items.push({ label: `Max Exhaust T (Thermocouple ${loc})`, value: best.v, column: "", unit: "°C", groups: [groupName] });
+      }
+      const spreadCol = groupCols.find((c) => /^exhaust spread/i.test(c.trim()));
+      if (spreadCol) {
+        const sv = rangeValues([spreadCol]).filter((v) => v > 0);
+        if (sv.length) {
+          const avg = sv.reduce((a, b) => a + b, 0) / sv.length;
+          items.push({ label: `Avg Exhaust Spread (vendor max 30 °C — ${avg <= 30 ? "OK" : "ABOVE"})`, value: avg, column: "", unit: "°C", groups: [groupName] });
+        }
+      }
       continue;
     }
     const max = maxNum(groupCols);
