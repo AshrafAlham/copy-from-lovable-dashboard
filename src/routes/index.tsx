@@ -942,6 +942,24 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
     if (groupName === "Fuel Gas") continue;
     if (groupName === "Utilities") continue;
     if (BEARING_TEMP_GROUPS.includes(groupName) || VIB_GROUPS.includes(groupName)) continue;
+    if (groupName === "Wheelspace") {
+      const vals = (re: RegExp) =>
+        rangeValues(groupCols.filter((c) => re.test(c))).filter((v) => v > 0);
+      const s1 = vals(/stage\s*1\b/i);
+      const s2 = vals(/stage\s*2\b/i);
+      const median = (a: number[]) => {
+        if (!a.length) return null;
+        const s = [...a].sort((x, y) => x - y);
+        const m = Math.floor(s.length / 2);
+        return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+      };
+      const m1 = median(s1), m2 = median(s2);
+      if (s1.length) items.push({ label: "Max Stage 1 Wheelspace T", value: Math.max(...s1), column: "", unit: "°C", groups: [groupName] });
+      if (s2.length) items.push({ label: "Max Stage 2 Wheelspace T", value: Math.max(...s2), column: "", unit: "°C", groups: [groupName] });
+      if (m1 !== null && m2 !== null)
+        items.push({ label: "Stage-to-Stage ΔT (median S2 − median S1)", value: m2 - m1, column: "", unit: "°C", groups: [groupName] });
+      continue;
+    }
     const max = maxNum(groupCols);
     const min = minNum(groupCols);
     const avg = avgNum(groupCols);
