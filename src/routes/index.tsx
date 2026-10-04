@@ -927,8 +927,7 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
     "Gearbox Bearings — Vibration",
   ];
 
-  const items: Kpi[] = [
-  ].filter((k) => k.value !== null);
+  const items: Kpi[] = [];
 
   // Add per-group generic KPIs (max / min / average) so every system has at least 2 cards.
   // Skip Axial Compressor — a dedicated Isentropic Efficiency card is added separately.
