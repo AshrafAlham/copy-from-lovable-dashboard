@@ -927,9 +927,7 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
     "Gearbox Bearings — Vibration",
   ];
 
-  const items: Kpi[] = [
-    { label: "FSR", value: getNum(latest, fsr), column: fsr ?? "", unit: "%", groups: ["Control"] },
-  ].filter((k) => k.value !== null);
+  const items: Kpi[] = [];
 
   // Add per-group generic KPIs (max / min / average) so every system has at least 2 cards.
   // Skip Axial Compressor — a dedicated Isentropic Efficiency card is added separately.
@@ -957,6 +955,26 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
       if (s2.length) items.push({ label: "Max Stage 2 Wheelspace T", value: Math.max(...s2), column: "", unit: "°C", groups: [groupName] });
       if (m1 !== null && m2 !== null)
         items.push({ label: "Stage-to-Stage ΔT (median S1 − median S2)", value: m1 - m2, column: "", unit: "°C", groups: [groupName] });
+      continue;
+    }
+    if (groupName === "Control") {
+      const colVals = (re: RegExp) => {
+        const c = groupCols.find((x) => re.test(x));
+        return c ? rangeValues([c]) : [];
+      };
+      const igv = colVals(/igv/i);
+      const noz = colVals(/nozzle/i);
+      const fsrV = colVals(/^fsr/i);
+      if (igv.length) {
+        items.push({ label: "Max IGV Position", value: Math.max(...igv), column: "", unit: "°", groups: [groupName] });
+        items.push({ label: "Min IGV Position", value: Math.min(...igv), column: "", unit: "°", groups: [groupName] });
+      }
+      if (noz.length) {
+        items.push({ label: "Max 2nd Stage Nozzle Position", value: Math.max(...noz), column: "", unit: "%", groups: [groupName] });
+        items.push({ label: "Min 2nd Stage Nozzle Position", value: Math.min(...noz), column: "", unit: "%", groups: [groupName] });
+      }
+      if (fsrV.length)
+        items.push({ label: "Avg FSR Position", value: fsrV.reduce((a, b) => a + b, 0) / fsrV.length, column: "", unit: "%", groups: [groupName] });
       continue;
     }
     if (groupName === "Exhaust") {
