@@ -554,18 +554,19 @@ function DashboardBody({
 
       {/* Axial compressor efficiency trend — icon shown only on that page */}
       {isAxial && (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <Button
             variant="outline"
             size="icon"
-            title="Axial compressor isentropic efficiency trend"
-            aria-label="Axial compressor isentropic efficiency trend"
+            className="size-12"
+            title="Axial Compressor Efficiency trend"
+            aria-label="Axial Compressor Efficiency trend"
             onClick={() => setEffOpen(true)}
           >
-            <TrendingUp className="size-4 text-primary" />
+            <TrendingUp className="size-7 text-primary" />
           </Button>
-          <span className="text-xs text-muted-foreground">
-            Isentropic efficiency trend — {train}
+          <span className="text-base font-semibold text-foreground">
+            Axial Compressor Efficiency — {train}
           </span>
         </div>
       )}
@@ -859,7 +860,7 @@ function EffTrendDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <TrendingUp className="size-4 text-primary" />
-            Axial Compressor Isentropic Efficiency — Trend
+            Axial Compressor Efficiency — Trend
           </DialogTitle>
           <DialogDescription className="font-mono text-xs">
             ηc = T₁·[(P₂/P₁)^((γ−1)/γ) − 1] / (T₂ − T₁) · γ = 1.4 · T in Kelvin · P₁ absolute, P₂ gauge
