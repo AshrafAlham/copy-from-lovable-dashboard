@@ -1474,7 +1474,7 @@ function KpiCard({
       ? "border-destructive/50 bg-destructive/5"
       : tone === "warning"
       ? "border-warning/40 bg-warning/5"
-      : "";
+      : "border-accent/30 border-l-4 border-l-accent bg-gradient-to-br from-accent/15 via-accent/5 to-primary/10";
   return (
     <Card className={toneClass}>
       <CardContent className="py-4 px-4">
