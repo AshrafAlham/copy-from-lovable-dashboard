@@ -1546,6 +1546,9 @@ function KpiCard({
             }`}
           >
             {delta > 0 ? "▲" : delta < 0 ? "▼" : "·"} {Math.abs(delta).toFixed(2)}
+            <span className="ml-1 font-sans text-muted-foreground">
+              {delta > 0 ? "higher" : delta < 0 ? "lower" : "same"} vs previous reading
+            </span>
           </p>
         )}
       </CardContent>
