@@ -355,13 +355,43 @@ function DashboardBody({
     return true;
   };
 
+  // -- Turbine mode filter (Simple / Combined) from the site sheet's
+  //    "Train X Mode" column; applied to train + site rows by shift slot.
+  const [turbineMode, setTurbineMode] = useState<"all" | "simple" | "combined">("all");
+  const slotKey = (d: Date) => {
+    const x = new Date(d.getTime());
+    const h = x.getHours();
+    let slot = 21;
+    if (h < 3) x.setDate(x.getDate() - 1);
+    else if (h < 15) slot = 9;
+    return `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}-${slot}`;
+  };
+  const modeSlots = useMemo(() => {
+    if (turbineMode === "all" || !siteRows?.length) return null;
+    const letter = train.replace(/^Train\s*/i, "").trim();
+    const re = new RegExp(`^\\s*(train|trian)\\s+${letter}\\s+mode\\s*$`, "i");
+    const col = (siteColumns ?? Object.keys(siteRows[0])).find((c) => re.test(c));
+    const set = new Set<string>();
+    if (!col) return set;
+    for (const r of siteRows) {
+      const v = String(r[col] ?? "").trim().toLowerCase();
+      if (r.__timestamp && v === turbineMode) set.add(slotKey(r.__timestamp));
+    }
+    return set;
+  }, [turbineMode, siteRows, siteColumns, train]);
+  const inMode = (r: Row) =>
+    !modeSlots || (!!r.__timestamp && modeSlots.has(slotKey(r.__timestamp)));
+
   const filteredData = useMemo(
-    () => (fromMs || toMs ? data.filter(inRange) : data),
-    [data, fromMs, toMs]
+    () => data.filter((r) => (fromMs || toMs ? inRange(r) : true) && inMode(r)),
+    [data, fromMs, toMs, modeSlots]
   );
   const filteredSite = useMemo(
-    () => (siteRows ? (fromMs || toMs ? siteRows.filter(inRange) : siteRows) : []),
-    [siteRows, fromMs, toMs]
+    () =>
+      siteRows
+        ? siteRows.filter((r) => (fromMs || toMs ? inRange(r) : true) && inMode(r))
+        : [],
+    [siteRows, fromMs, toMs, modeSlots]
   );
 
   const siteSplit = useMemo(
@@ -530,6 +560,23 @@ function DashboardBody({
             >
               Reset
             </Button>
+            <div className="flex items-center gap-1 rounded-md border border-border p-1">
+              <span className="text-xs text-muted-foreground px-1">Turbine mode</span>
+              <Button
+                size="sm"
+                className={`h-7 text-xs font-semibold ${turbineMode === "simple" ? "bg-accent text-accent-foreground hover:bg-accent/90 ring-2 ring-accent/50" : "bg-accent/15 text-accent hover:bg-accent/25"}`}
+                onClick={() => setTurbineMode(turbineMode === "simple" ? "all" : "simple")}
+              >
+                Simple
+              </Button>
+              <Button
+                size="sm"
+                className={`h-7 text-xs font-semibold ${turbineMode === "combined" ? "bg-primary text-primary-foreground hover:bg-primary/90 ring-2 ring-primary/50" : "bg-primary/15 text-primary hover:bg-primary/25"}`}
+                onClick={() => setTurbineMode(turbineMode === "combined" ? "all" : "combined")}
+              >
+                Combined
+              </Button>
+            </div>
             <Badge variant="outline" className="font-mono">
               <Activity className="size-3 mr-1" />
               {columns.length} sensors
