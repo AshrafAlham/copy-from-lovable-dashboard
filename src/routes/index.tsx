@@ -623,6 +623,7 @@ function DashboardBody({
               <SectionView
                 key={g.key}
                 sensors={g.sensors}
+                everySensor={Array.from(new Set(allTabs.flatMap((t) => t.sensors)))}
                 data={mergedData}
                 sectionName={g.label}
                 onSelectionChange={setChartSensors}
@@ -1521,17 +1522,21 @@ let panelCounter = 0;
 const nextPanelId = () => `p${++panelCounter}_${Date.now().toString(36)}`;
 
 function SectionView({
-  sensors,
+  sensors: sectionSensors,
+  everySensor,
   data,
   sectionName,
   onSelectionChange,
 }: {
   sensors: string[];
+  everySensor?: string[];
   data: Row[];
   sectionName: string;
   onSelectionChange?: (sensors: string[]) => void;
 }) {
-  const initialSensors = sensors.slice(0, Math.min(4, sensors.length));
+  const [showAll, setShowAll] = useState(false);
+  const sensors = showAll && everySensor?.length ? everySensor : sectionSensors;
+  const initialSensors = sectionSensors.slice(0, Math.min(4, sectionSensors.length));
   const [panels, setPanels] = useState<ChartPanelConfig[]>(() => [
     { id: nextPanelId(), kind: "line", sensors: initialSensors },
   ]);
@@ -1582,6 +1587,18 @@ function SectionView({
           >
             <Plus className="size-3 mr-1" /> Line
           </Button>
+          {everySensor && (
+            <Button
+              size="sm"
+              variant={showAll ? "default" : "outline"}
+              className="h-8 text-xs"
+              onClick={() => setShowAll((v) => !v)}
+              title="Show sensors from all sections to compare"
+            >
+              <Layers className="size-3.5 mr-1" />
+              {showAll ? "All sensors" : "Show all sensors"}
+            </Button>
+          )}
         </div>
         <div className="flex items-center gap-1">
           <span className="text-xs text-muted-foreground mr-1">Layout</span>
