@@ -1317,7 +1317,15 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
       if (best) break;
     }
     if (!best) return k;
-    return { ...k, where: `${best.c}${best.t ? ` · ${format(best.t, "dd MMM yyyy HH:mm")}` : ""}` };
+    const tag = best.c.match(/\([^)]*\)/)?.[0] ?? best.c;
+    let when = "";
+    if (best.t) {
+      const d = new Date(best.t);
+      const h = d.getHours();
+      if (h < 3) d.setDate(d.getDate() - 1);
+      when = ` · ${format(d, "dd MMM yyyy")} ${h >= 3 && h < 15 ? "9:00 A.M" : "9:00 P.M"}`;
+    }
+    return { ...k, where: `${tag}${when}` };
   };
   // Tone heuristics
   return items.map(locate).map((k) => {
