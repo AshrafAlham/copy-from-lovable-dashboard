@@ -732,6 +732,7 @@ interface Kpi {
   unit?: string;
   tone?: "default" | "warning" | "danger";
   groups?: string[];
+  where?: string;
 }
 
 // Isentropic efficiency of an axial air compressor from the latest row.
@@ -1303,8 +1304,23 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
 
 
 
+  // Locate sensor + date where each "Max/Highest" value occurred.
+  const locate = (k: Kpi): Kpi => {
+    if (k.value === null || !/^(max|highest)/i.test(k.label) || /spread|diff|ratio/i.test(k.label)) return k;
+    const cand = k.column ? [k.column] : (k.groups ?? []).flatMap((g) => groups[g] ?? []);
+    let best: { c: string; t?: Date | null } | null = null;
+    for (const r of data) {
+      for (const c of cand) {
+        const v = r[c];
+        if (typeof v === "number" && Math.abs(v - k.value) < 1e-6) { best = { c, t: r.__timestamp }; break; }
+      }
+      if (best) break;
+    }
+    if (!best) return k;
+    return { ...k, where: `${best.c}${best.t ? ` · ${format(best.t, "dd MMM yyyy HH:mm")}` : ""}` };
+  };
   // Tone heuristics
-  return items.map((k) => {
+  return items.map(locate).map((k) => {
     if (k.label === "Max Bearing T" && k.value && k.value > 85)
       return { ...k, tone: k.value > 95 ? "danger" : "warning" };
     if (k.label === "Max Vibration" && k.value && k.value > 7)
@@ -1514,6 +1530,7 @@ function KpiCard({
   tone = "default",
   previous,
   column,
+  where,
 }: Kpi & { previous?: Row }) {
   const prev = column ? getNum(previous, column) : null;
   const delta = value !== null && prev !== null ? value - prev : null;
@@ -1535,6 +1552,11 @@ function KpiCard({
             <span className="text-sm text-muted-foreground ml-1">{unit}</span>
           )}
         </p>
+        {where && (
+          <p className="text-[11px] text-muted-foreground mt-0.5 break-words" title={where}>
+            at {where}
+          </p>
+        )}
         {delta !== null && (
           <p
             className={`text-xs font-mono mt-0.5 ${
@@ -1546,8 +1568,9 @@ function KpiCard({
             }`}
           >
             {delta > 0 ? "▲" : delta < 0 ? "▼" : "·"} {Math.abs(delta).toFixed(2)}
+            {unit === "%" ? " %-points" : unit ? ` ${unit}` : ""}
             <span className="ml-1 font-sans text-muted-foreground">
-              {delta > 0 ? "higher" : delta < 0 ? "lower" : "same"} vs previous reading
+              ({unit === "%" ? "change in %" : "sensor value change"}) {delta > 0 ? "higher" : delta < 0 ? "lower" : "same"} vs previous reading
             </span>
           </p>
         )}
