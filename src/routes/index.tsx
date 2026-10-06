@@ -1308,7 +1308,7 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
   const locate = (k: Kpi): Kpi => {
     if (k.value === null || !/^(max|highest)/i.test(k.label) || /spread|diff|ratio/i.test(k.label)) return k;
     const cand = k.column ? [k.column] : (k.groups ?? []).flatMap((g) => groups[g] ?? []);
-    let best: { c: string; t?: Date } | null = null;
+    let best: { c: string; t?: Date | null } | null = null;
     for (const r of data) {
       for (const c of cand) {
         const v = r[c];
