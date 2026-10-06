@@ -1631,7 +1631,7 @@ function SectionView({
 }) {
   const [showAll, setShowAll] = useState(false);
   const sensors = showAll && everySensor?.length ? everySensor : sectionSensors;
-  const initialSensors = sectionSensors.slice(0, Math.min(4, sectionSensors.length));
+  const initialSensors = sectionSensors.slice(0, 1);
   const [panels, setPanels] = useState<ChartPanelConfig[]>(() => [
     { id: nextPanelId(), kind: "line", sensors: initialSensors },
   ]);
@@ -1925,9 +1925,9 @@ function ChartPanel({
           )}
         </div>
       </CardHeader>
-      <CardContent>
-        <ScrollArea className="h-[88px] mb-2 rounded-md border bg-muted/30 p-2">
-          <div className="flex flex-wrap gap-1">
+      <CardContent className="flex flex-col md:flex-row-reverse gap-3">
+        <ScrollArea className="h-[160px] md:h-[320px] md:w-60 shrink-0 rounded-md border bg-muted/30 p-2">
+          <div className="flex flex-col gap-1">
             {allSensors.length === 0 ? (
               <span className="text-xs text-muted-foreground">No sensors in this group.</span>
             ) : (
@@ -1937,7 +1937,7 @@ function ChartPanel({
                   <button
                     key={s}
                     onClick={() => toggleSensor(s)}
-                    className={`text-[11px] px-2 py-1 rounded-md font-mono transition-colors ${
+                    className={`text-left text-[11px] px-2 py-1 rounded-md font-mono transition-colors ${
                       active
                         ? "bg-primary/20 text-foreground ring-1 ring-primary/40"
                         : "bg-background hover:bg-muted text-muted-foreground border"
@@ -1950,10 +1950,10 @@ function ChartPanel({
             )}
           </div>
         </ScrollArea>
-        <div className="h-[320px]">
+        <div className="h-[320px] flex-1 min-w-0">
           {sensors.length === 0 ? (
             <div className="h-full grid place-items-center text-xs text-muted-foreground">
-              Pick sensors from the menu above
+              Pick sensors from the list
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
