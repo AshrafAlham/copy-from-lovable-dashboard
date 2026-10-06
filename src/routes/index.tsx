@@ -620,7 +620,22 @@ function DashboardBody({
       <EffTrendDialog open={effOpen} onOpenChange={setEffOpen} series={effSeries} />
 
       {/* KPI grid — filtered by the currently selected system/page */}
-      {visibleKpis.length > 0 && (
+      {visibleKpis.length > 0 && visibleKpis.some((k) => k.label.startsWith("Oil Cooler")) ? (
+        (() => {
+          const other = visibleKpis.filter((k) => !k.label.startsWith("Oil Cooler"));
+          const rows = [other.slice(0, 4), other.slice(4), visibleKpis.filter((k) => k.label.startsWith("Oil Cooler"))];
+          const cols = ["lg:grid-cols-4", "lg:grid-cols-5", "lg:grid-cols-6"];
+          return (
+            <div className="space-y-3">
+              {rows.map((r, ri) => r.length > 0 && (
+                <div key={ri} className={`grid grid-cols-2 md:grid-cols-3 ${cols[ri]} gap-3`}>
+                  {r.map((k, i) => <KpiCard key={`${k.label}-${i}`} {...k} previous={previous} />)}
+                </div>
+              ))}
+            </div>
+          );
+        })()
+      ) : visibleKpis.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           {visibleKpis.map((k, i) => (
             <KpiCard key={`${k.label}-${i}`} {...k} previous={previous} />
@@ -1236,7 +1251,6 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
   push("Max Compressor Bearing Return T", maxNum(columns.filter((c) => /oil return t from bearing/i.test(c))), "°C");
   push("Max Lube Oil Tank Pressure", maxNum(columns.filter((c) => /oil p in the main tank/i.test(c))), "mmH₂O");
   push("Avg Hydraulic Oil Supply P", avgNum(columns.filter((c) => /hydraulic oil supply/i.test(c))), "bar");
-  push("Avg Control Oil Supply P", avgNum(columns.filter((c) => /control oil header/i.test(c))), "bar");
 
   // ---- Utilities cards ----
   const UT = ["Utilities"];
@@ -1296,7 +1310,7 @@ function buildKpis(data: Row[], columns: string[]): Kpi[] {
       if (Number.isFinite(pr) && pr > 1 && pr < 30) ratios.push(pr);
     }
     if (ratios.length)
-      items.push({ label: "Avg Compressor Pressure Ratio", value: ratios.reduce((a, b) => a + b, 0) / ratios.length, column: "", unit: "bar", groups: AX });
+      items.push({ label: "Avg Compressor Pressure Ratio", value: ratios.reduce((a, b) => a + b, 0) / ratios.length, column: "", unit: "", groups: AX });
   }
 
 
