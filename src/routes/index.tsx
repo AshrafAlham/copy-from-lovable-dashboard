@@ -1781,7 +1781,6 @@ function SectionView({
       ) : (
         <PanelGrid
           className={`grid gap-4 ${gridClass}`}
-          rows={cols === 1 ? panels.length : Math.ceil(panels.length / cols)}
         >
           {panels.map((panel) => (
             <ChartPanel
