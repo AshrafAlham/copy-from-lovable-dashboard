@@ -1650,7 +1650,7 @@ function PanelGrid({
   );
 }
 
-
+interface ChartPanelConfig {
   id: string;
   kind: PanelKind;
   sensors: string[];
