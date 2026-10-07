@@ -653,7 +653,7 @@ function DashboardBody({
             </CardTitle>
           </CardHeader>
           <CardContent className="p-2">
-            <ScrollArea className="max-h-[70vh]">
+            <ScrollArea className="max-h-[70vh] md:max-h-[calc(100vh-8rem)]">
               <nav className="flex flex-col gap-1">
                 {allTabs.map((g) => {
                   const active = g.key === activeGroup;
@@ -1998,7 +1998,7 @@ function ChartPanel({
             )}
           </div>
         </ScrollArea>
-        <div className="h-[320px] flex-1 min-w-0">
+        <div className="flex-1 min-w-0 min-h-[240px]">
           {sensors.length === 0 ? (
             <div className="h-full grid place-items-center text-xs text-muted-foreground">
               Pick sensors from the list
