@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueries } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -1734,7 +1734,10 @@ function SectionView({
           </CardContent>
         </Card>
       ) : (
-        <div className={`grid gap-4 ${gridClass}`}>
+        <PanelGrid
+          className={`grid gap-4 ${gridClass}`}
+          rows={cols === 1 ? panels.length : Math.ceil(panels.length / cols)}
+        >
           {panels.map((panel) => (
             <ChartPanel
               key={panel.id}
@@ -1746,7 +1749,7 @@ function SectionView({
               canRemove={panels.length > 1}
             />
           ))}
-        </div>
+        </PanelGrid>
       )}
     </div>
   );
