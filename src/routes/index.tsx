@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueries } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -65,6 +65,10 @@ export const Route = createFileRoute("/")({
         content:
           "Live monitoring dashboard for rotating equipment trains — bearings, vibration, lube oil, gearbox, exhaust.",
       },
+      { property: "og:title", content: "Trains Operation Monitor (TOM)" },
+      { property: "og:description", content: "Monitor train sensors, compare equipment trends, and analyze rotating equipment performance." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: Dashboard,
@@ -645,15 +649,15 @@ function DashboardBody({
 
 
       {/* Sections — sidebar pages */}
-      <div className="grid gap-4 md:grid-cols-[220px_1fr]">
-        <Card className="md:sticky md:top-24 md:self-start">
+      <div data-train-workspace className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)] md:h-[max(600px,calc(100dvh-18rem))]">
+        <Card data-pages-panel className="flex flex-col min-h-0 md:h-full overflow-hidden">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs uppercase tracking-wider text-muted-foreground">
               Pages
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-2">
-            <ScrollArea className="max-h-[70vh] md:max-h-[calc(100vh-8rem)]">
+          <CardContent className="p-2 min-h-0 md:flex-1">
+            <ScrollArea className="h-[min(70vh,600px)] md:h-full">
               <nav className="flex flex-col gap-1">
                 {allTabs.map((g) => {
                   const active = g.key === activeGroup;
@@ -678,7 +682,7 @@ function DashboardBody({
             </ScrollArea>
           </CardContent>
         </Card>
-        <div className="min-w-0">
+        <div className="min-w-0 min-h-0 md:h-full">
           {allTabs
             .filter((g) => g.key === activeGroup)
             .map((g) => (
@@ -1605,51 +1609,6 @@ type PanelKind = "line" | "bar";
 type BarMode = "snapshot" | "timeseries";
 type BarOrient = "vertical" | "horizontal";
 
-// Measures the free vertical space under the page content and stretches the
-// chart grid to fill it, so each chart card uses the full viewport height.
-function PanelGrid({
-  className,
-  children,
-}: {
-  className?: string;
-  children: ReactNode;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [avail, setAvail] = useState<number | null>(null);
-
-  useEffect(() => {
-    const measure = () => {
-      const el = ref.current;
-      if (!el) return;
-      const top = el.getBoundingClientRect().top;
-      const h = window.innerHeight - top - 16;
-      setAvail(h > 340 ? h : null);
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(document.body);
-    window.addEventListener("resize", measure);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener("resize", measure);
-    };
-  }, []);
-
-  return (
-    <div
-      ref={ref}
-      className={className}
-      style={
-        avail
-          ? { height: avail, gridAutoRows: "minmax(320px, 1fr)" }
-          : { gridAutoRows: "minmax(320px, auto)" }
-      }
-    >
-      {children}
-    </div>
-  );
-}
-
 interface ChartPanelConfig {
   id: string;
   kind: PanelKind;
@@ -1712,9 +1671,9 @@ function SectionView({
       : "grid-cols-1 lg:grid-cols-2 xl:grid-cols-3";
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4 min-h-0 md:h-full">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2 justify-between">
+      <div className="flex flex-wrap items-center gap-2 justify-between shrink-0">
         <div className="flex items-center gap-1">
           <span className="text-xs uppercase tracking-wider text-muted-foreground mr-2">
             {sectionName} · {panels.length} chart{panels.length !== 1 && "s"}
@@ -1779,8 +1738,8 @@ function SectionView({
           </CardContent>
         </Card>
       ) : (
-        <PanelGrid
-          className={`grid gap-4 ${gridClass}`}
+        <div
+          className={`grid gap-4 flex-1 min-h-[520px] md:min-h-0 auto-rows-[minmax(320px,1fr)] overflow-y-auto ${gridClass}`}
         >
           {panels.map((panel) => (
             <ChartPanel
@@ -1793,7 +1752,7 @@ function SectionView({
               canRemove={panels.length > 1}
             />
           ))}
-        </PanelGrid>
+        </div>
       )}
     </div>
   );
@@ -1891,7 +1850,7 @@ function ChartPanel({
   );
 
   return (
-    <Card className="flex flex-col overflow-hidden h-full min-h-[320px]">
+    <Card data-chart-panel className="flex flex-col overflow-hidden h-full min-h-[320px]">
       <CardHeader className="pb-2">
         <div className="flex items-center gap-2 justify-between flex-wrap">
           <div className="flex items-center gap-2 min-w-0">
@@ -1973,7 +1932,7 @@ function ChartPanel({
         </div>
       </CardHeader>
       <CardContent className="flex flex-col md:flex-row-reverse gap-3 flex-1 min-h-0">
-        <ScrollArea className="h-[160px] md:h-full md:w-60 shrink-0 rounded-md border bg-muted/30 p-2">
+        <ScrollArea data-sensor-list className="h-[160px] md:h-full md:w-60 shrink-0 rounded-md border bg-muted/30 p-2">
           <div className="flex flex-col gap-1">
             {allSensors.length === 0 ? (
               <span className="text-xs text-muted-foreground">No sensors in this group.</span>
