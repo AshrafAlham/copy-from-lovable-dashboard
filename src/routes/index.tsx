@@ -1946,7 +1946,7 @@ function ChartPanel({
                     className={`text-left text-[11px] px-2 py-1 rounded-md font-mono transition-colors ${
                       active
                         ? "bg-primary/20 text-foreground ring-1 ring-primary/40"
-                        : "bg-background hover:bg-muted text-muted-foreground border"
+                        : "bg-background hover:bg-muted text-foreground border"
                     }`}
                   >
                     {shortName(s)}
@@ -2468,7 +2468,7 @@ function CompareView({
                       className={`w-full text-left text-xs px-2 py-1.5 rounded-md transition-colors font-mono ${
                         active
                           ? "bg-primary/15 text-foreground ring-1 ring-primary/30"
-                          : "hover:bg-muted text-muted-foreground"
+                          : "hover:bg-muted text-foreground"
                       }`}
                     >
                       {shortName(s)}
