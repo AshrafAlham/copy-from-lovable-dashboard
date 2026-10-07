@@ -1892,7 +1892,7 @@ function ChartPanel({
   );
 
   return (
-    <Card>
+    <Card className="flex flex-col overflow-hidden h-full min-h-[320px]">
       <CardHeader className="pb-2">
         <div className="flex items-center gap-2 justify-between flex-wrap">
           <div className="flex items-center gap-2 min-w-0">
@@ -1973,8 +1973,8 @@ function ChartPanel({
           )}
         </div>
       </CardHeader>
-      <CardContent className="flex flex-col md:flex-row-reverse gap-3">
-        <ScrollArea className="h-[160px] md:h-[320px] md:w-60 shrink-0 rounded-md border bg-muted/30 p-2">
+      <CardContent className="flex flex-col md:flex-row-reverse gap-3 flex-1 min-h-0">
+        <ScrollArea className="h-[160px] md:h-full md:w-60 shrink-0 rounded-md border bg-muted/30 p-2">
           <div className="flex flex-col gap-1">
             {allSensors.length === 0 ? (
               <span className="text-xs text-muted-foreground">No sensors in this group.</span>
