@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueries } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -1605,7 +1605,52 @@ type PanelKind = "line" | "bar";
 type BarMode = "snapshot" | "timeseries";
 type BarOrient = "vertical" | "horizontal";
 
-interface ChartPanelConfig {
+// Measures the free vertical space under the page content and stretches the
+// chart grid to fill it, so each chart card uses the full viewport height.
+function PanelGrid({
+  className,
+  children,
+}: {
+  className?: string;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [avail, setAvail] = useState<number | null>(null);
+
+  useEffect(() => {
+    const measure = () => {
+      const el = ref.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top;
+      const h = window.innerHeight - top - 16;
+      setAvail(h > 340 ? h : null);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(document.body);
+    window.addEventListener("resize", measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
+
+  return (
+    <div
+      ref={ref}
+      className={className}
+      style={
+        avail
+          ? { height: avail, gridAutoRows: "minmax(320px, 1fr)" }
+          : { gridAutoRows: "minmax(320px, auto)" }
+      }
+    >
+      {children}
+    </div>
+  );
+}
+
+
   id: string;
   kind: PanelKind;
   sensors: string[];
