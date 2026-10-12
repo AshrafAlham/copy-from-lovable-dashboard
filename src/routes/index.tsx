@@ -17,7 +17,7 @@ import {
 } from "recharts";
 import { format } from "date-fns";
 
-import { fetchSheet, type Row } from "@/lib/parse-sheet";
+import { fetchSheet, readingDate, type Row } from "@/lib/parse-sheet";
 import {
   TRAIN_SHEETS,
   SITE_CONDITIONS_SHEET,
@@ -351,9 +351,9 @@ function DashboardBody({
   //    Site Conditions sheet so the user can extract a consistent slice.
   const overallRange = useMemo(() => {
     const all: number[] = [];
-    for (const r of data) if (r.__timestamp) all.push(r.__timestamp.getTime());
+    for (const r of data) { const date = readingDate(r); if (date) all.push(date.getTime()); }
     for (const r of siteRows ?? [])
-      if (r.__timestamp) all.push(r.__timestamp.getTime());
+      { const date = readingDate(r); if (date) all.push(date.getTime()); }
     if (!all.length) return null;
     return { min: Math.min(...all), max: Math.max(...all) };
   }, [data, siteRows]);
@@ -366,7 +366,7 @@ function DashboardBody({
   const toMs = to ? new Date(to + "T23:59:59").getTime() : null;
 
   const inRange = (r: Row) => {
-    const t = r.__timestamp?.getTime();
+    const t = readingDate(r)?.getTime();
     if (t == null) return false;
     if (fromMs != null && t < fromMs) return false;
     if (toMs != null && t > toMs) return false;
@@ -429,7 +429,7 @@ function DashboardBody({
     if (!filteredSite.length) return filteredData;
     const keep = new Set(siteSensors);
     const siteRowsTrim = filteredSite.map((r) => {
-      const o: Row = { __timestamp: r.__timestamp } as Row;
+      const o: Row = { __timestamp: r.__timestamp, __readingDate: readingDate(r) };
       for (const k of Object.keys(r)) if (keep.has(k)) o[k] = r[k];
       return o;
     });
@@ -836,7 +836,7 @@ export function axialEffSeries(
   const raw: { ts: number; eff: number }[] = [];
   for (const r of data) {
     const eff = axialEffForRow(r, columns);
-    const ts = r.__timestamp?.getTime();
+    const ts = readingDate(r)?.getTime();
     // Axial compressors realistically sit between 60% and 95%.
     if (eff !== null && ts && eff >= 50 && eff <= 100) raw.push({ ts, eff });
   }
@@ -869,7 +869,7 @@ function EffTrendChart({
     const byTs = new Map<number, Record<string, number | string>>();
     for (const s of series)
       for (const p of s.points) {
-        const row = byTs.get(p.ts) ?? { __ts: p.ts, time: format(new Date(p.ts), "MM/dd HH:mm") };
+        const row = byTs.get(p.ts) ?? { __ts: p.ts, time: format(new Date(p.ts), "MM/dd/yyyy") };
         row[s.train] = Number(p.eff.toFixed(2));
         byTs.set(p.ts, row);
       }
@@ -908,6 +908,7 @@ function EffTrendChart({
               fontSize: 12,
             }}
             formatter={(v) => `${v}%`}
+            labelFormatter={(_, payload) => payload?.[0]?.payload?.__ts != null ? format(new Date(payload[0].payload.__ts), "MM/dd/yyyy HH:mm") : ""}
           />
           <Legend wrapperStyle={{ fontSize: 11 }} />
           {keys.map((k, i) => (
@@ -1794,10 +1795,13 @@ function ChartPanel({
   const chartData = useMemo(
     () =>
       data
-        .filter((r) => r.__timestamp)
+        .filter((r) => readingDate(r))
+        .slice()
+        .sort((a, b) => (readingDate(a)?.getTime() ?? 0) - (readingDate(b)?.getTime() ?? 0))
         .map((r) => {
           const o: Record<string, string | number | null> = {
-            t: format(r.__timestamp as Date, "MM/dd HH:mm"),
+            t: format(readingDate(r) as Date, "MM/dd/yyyy"),
+            __ts: readingDate(r)?.getTime() ?? null,
           };
           for (const s of sensors) {
             const v = r[s];
@@ -1852,6 +1856,7 @@ function ChartPanel({
         allowDataOverflow={false}
       />
       <Tooltip
+        labelFormatter={(_, payload) => payload?.[0]?.payload?.__ts != null ? format(new Date(payload[0].payload.__ts), "MM/dd/yyyy HH:mm") : ""}
         contentStyle={{
           background: "var(--color-popover)",
           border: "1px solid var(--color-border)",
@@ -2176,7 +2181,7 @@ function CompareView({
   const fromMs = from ? new Date(from + "T00:00:00").getTime() : null;
   const toMs = to ? new Date(to + "T23:59:59").getTime() : null;
   const inRange = (r: Row) => {
-    const t = r.__timestamp?.getTime();
+    const t = readingDate(r)?.getTime();
     if (t == null) return false;
     if (fromMs != null && t < fromMs) return false;
     if (toMs != null && t > toMs) return false;
@@ -2221,7 +2226,7 @@ function CompareView({
       const cols = q.data!.columns;
       for (const src of q.data!.rows) {
         if (!inRange(src)) continue;
-        const r: Row = { __timestamp: src.__timestamp };
+        const r: Row = { __timestamp: src.__timestamp, __readingDate: readingDate(src) };
         for (const c of cols) {
           const v = src[c];
           r[canonKey(c)] = typeof v === "number" ? v : null;
@@ -2232,7 +2237,7 @@ function CompareView({
       if (m) {
         for (const sr of site!.rows) {
           if (!inRange(sr)) continue;
-          const r: Row = { __timestamp: sr.__timestamp };
+          const r: Row = { __timestamp: sr.__timestamp, __readingDate: readingDate(sr) };
           for (const [canon, actual] of Object.entries(m)) {
             const v = sr[actual];
             r[canon] = typeof v === "number" ? v : null;
@@ -2304,11 +2309,12 @@ function CompareView({
     const map = new Map<number, Record<string, string | number | null>>();
     for (const t of activeTrains) {
       for (const row of rowsByTrain[t] ?? []) {
-        if (!row.__timestamp) continue;
-        const ts = row.__timestamp.getTime();
+        const date = readingDate(row);
+        if (!date) continue;
+        const ts = date.getTime();
         let entry = map.get(ts);
         if (!entry) {
-          entry = { __ts: ts, t: format(row.__timestamp, "MM/dd HH:mm") };
+          entry = { __ts: ts, t: format(date, "MM/dd/yyyy") };
           map.set(ts, entry);
         }
         for (const s of effectiveSensors) {
@@ -2552,6 +2558,7 @@ function LineCompare({
           allowDataOverflow={false}
         />
         <Tooltip
+          labelFormatter={(_, payload) => payload?.[0]?.payload?.__ts != null ? format(new Date(payload[0].payload.__ts), "MM/dd/yyyy HH:mm") : ""}
           contentStyle={{
             background: "var(--color-popover)",
             border: "1px solid var(--color-border)",
