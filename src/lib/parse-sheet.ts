@@ -3,7 +3,7 @@ import Papa from "papaparse";
 export type Row = {
   __timestamp: Date | null;
   __readingDate?: Date | null;
-  [key: string]: string | number | Date | null;
+  [key: string]: string | number | Date | null | undefined;
 };
 
 export interface SheetData {
