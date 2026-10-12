@@ -1787,7 +1787,7 @@ function ChartPanel({
           };
           for (const s of sensors) {
             const v = r[s];
-            o[s] = typeof v === "number" ? v : null;
+            o[s] = typeof v === "number" && isPlottable(s, v) ? v : null;
           }
           return o;
         }),
@@ -2300,7 +2300,8 @@ function CompareView({
         for (const s of effectiveSensors) {
           if (!(s in row)) continue;
           const v = row[s];
-          entry[`${t} · ${s}`] = typeof v === "number" ? v : null;
+          entry[`${t} · ${s}`] =
+            typeof v === "number" && isPlottable(s, v) ? v : null;
         }
       }
     }
