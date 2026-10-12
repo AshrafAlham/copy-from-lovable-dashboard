@@ -123,6 +123,20 @@ export function formatTick(v: number | string) {
   return String(r);
 }
 
+// Some sensors sit near zero while their machine is shut down, which drags the
+// trend down and makes running behaviour impossible to read. Those readings are
+// left out of the charts: here, an air compressor discharge temperature below
+// 50 °C means the compressor was stopped.
+const STOP_BELOW: { match: RegExp; min: number }[] = [
+  { match: /compressor [abc] discharge t/i, min: 50 },
+];
+
+// True when a reading is worth plotting for this sensor.
+export function isPlottable(sensor: string, v: number): boolean {
+  const rule = STOP_BELOW.find((r) => r.match.test(sensor));
+  return !rule || v >= rule.min;
+}
+
 function Dashboard() {
   const trainNames = Object.keys(TRAIN_SHEETS);
   const [mode, setMode] = useState<"single" | "compare">("single");
@@ -1787,7 +1801,7 @@ function ChartPanel({
           };
           for (const s of sensors) {
             const v = r[s];
-            o[s] = typeof v === "number" ? v : null;
+            o[s] = typeof v === "number" && isPlottable(s, v) ? v : null;
           }
           return o;
         }),
@@ -2300,7 +2314,8 @@ function CompareView({
         for (const s of effectiveSensors) {
           if (!(s in row)) continue;
           const v = row[s];
-          entry[`${t} · ${s}`] = typeof v === "number" ? v : null;
+          entry[`${t} · ${s}`] =
+            typeof v === "number" && isPlottable(s, v) ? v : null;
         }
       }
     }
