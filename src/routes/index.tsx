@@ -24,6 +24,8 @@ import {
   TRAIN_TAG_DIGIT,
   groupColumns,
   splitSiteColumns,
+  SECTIONS,
+  META_COLUMNS,
 } from "@/lib/sheets-config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -54,7 +56,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Activity, AlertTriangle, RefreshCw, Gauge, Plus, X, LayoutGrid, Columns2, Rows, TrendingUp, Layers } from "lucide-react";
+import { Activity, AlertTriangle, RefreshCw, Gauge, Plus, X, LayoutGrid, Columns2, Rows, TrendingUp, Layers, Fan } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -139,7 +141,7 @@ export function isPlottable(sensor: string, v: number): boolean {
 
 function Dashboard() {
   const trainNames = Object.keys(TRAIN_SHEETS);
-  const [mode, setMode] = useState<"single" | "compare">("single");
+  const [mode, setMode] = useState<"single" | "compare" | "utilities">("single");
   const [train, setTrain] = useState(trainNames[0]);
   const url = TRAIN_SHEETS[train];
 
@@ -167,7 +169,7 @@ function Dashboard() {
     queries: trainNames.map((t) => ({
       queryKey: ["sheet", t, TRAIN_SHEETS[t]],
       queryFn: () => fetchSheet(TRAIN_SHEETS[t]),
-      enabled: !!TRAIN_SHEETS[t] && mode === "compare",
+      enabled: !!TRAIN_SHEETS[t] && (mode === "compare" || mode === "utilities"),
       refetchInterval: () => msUntilNext11AM(),
       staleTime: ONE_DAY,
       refetchOnWindowFocus: false,
@@ -196,10 +198,13 @@ function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <Tabs value={mode} onValueChange={(v) => setMode(v as "single" | "compare")}>
+            <Tabs value={mode} onValueChange={(v) => setMode(v as "single" | "compare" | "utilities")}>
               <TabsList className="h-9">
                 <TabsTrigger value="single" className="text-xs">Single Train</TabsTrigger>
                 <TabsTrigger value="compare" className="text-xs">Compare Trains</TabsTrigger>
+                <TabsTrigger value="utilities" className="text-xs">
+                  <Fan className="size-3.5 mr-1.5" />Utilities
+                </TabsTrigger>
               </TabsList>
             </Tabs>
             {mode === "single" && (
@@ -271,6 +276,18 @@ function Dashboard() {
         {mode === "compare" && (
           <CompareView
             trainNames={trainNames}
+            queries={compareQueries.map((q, i) => ({
+              train: trainNames[i],
+              data: q.data,
+              isLoading: q.isLoading,
+              error: q.error as Error | null,
+            }))}
+            siteRows={siteQuery.data?.rows}
+            siteColumns={siteQuery.data?.columns}
+          />
+        )}
+        {mode === "utilities" && (
+          <UtilitiesView
             queries={compareQueries.map((q, i) => ({
               train: trainNames[i],
               data: q.data,
