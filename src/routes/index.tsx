@@ -2181,10 +2181,24 @@ interface CompareQuery {
   error: Error | null;
 }
 
-// Tags carry the train number, e.g. Train A "(LT-1600)" vs Train B "(LT-2600)".
-// Canonicalise to "(LT-x600)" so the same measurement lines up across trains.
+// Canonicalise column names across trains so the same measurement lines up in compare mode:
+// - Instrument tags: "(LT-1600)" / "(LT-2600)" → "(LT-x600)", "(-1452)" → "(-x452)"
+// - Train bracket suffixes: "Exhaust Spread  [Turbine A]" / "[Turbine B]" → "Exhaust Spread"
+// - Accidental leading brackets or spacing discrepancies: "[Wheelspace..." → "Wheelspace..."
 function canonKey(col: string) {
-  return col.replace(/\(([A-Za-z]+)-[1-4](?=\d)/g, "($1-x");
+  let s = col.trim();
+  // Remove accidental leading bracket (e.g. '[Wheelspace...')
+  s = s.replace(/^\[/, "");
+  // Tags with train digit: (TE-1410) -> (TE-x410), (-1452) -> (-x452)
+  s = s.replace(/\(([A-Za-z]*)-[1-4](?=\d)/g, "($1-x");
+  s = s.replace(/\(-[1-4](?=\d)/g, "(-x");
+  // Remove train letter suffix in brackets, e.g. [Turbine A], [Turbine B], or unclosed [Turbine A
+  s = s.replace(/\s*\[?\s*Turbine\s*[A-D]\s*\]?/gi, "");
+  // Align compartment temp (TE-1452 in Train A vs TE-3452 in Train C)
+  s = s.replace(/Turbine\s+compartment\s+temp\.\s+\(TE-x452\)/i, "Coupling compartment temp. (TE-x452)");
+  // Collapse multiple spaces
+  s = s.replace(/\s+/g, " ").trim();
+  return s;
 }
 
 
