@@ -22,10 +22,10 @@ import {
   TRAIN_SHEETS,
   SITE_CONDITIONS_SHEET,
   TRAIN_TAG_DIGIT,
+  META_COLUMNS,
   groupColumns,
   splitSiteColumns,
   SECTIONS,
-  META_COLUMNS,
 } from "@/lib/sheets-config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -56,7 +56,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Activity, AlertTriangle, RefreshCw, Gauge, Plus, X, LayoutGrid, Columns2, Rows, TrendingUp, Layers, Fan } from "lucide-react";
+import { Activity, AlertTriangle, RefreshCw, Gauge, Plus, X, LayoutGrid, Columns2, Rows, TrendingUp, Layers, Wrench, Fan } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -94,6 +94,16 @@ function msUntilNext11AM() {
   next.setHours(11, 0, 0, 0);
   if (next.getTime() <= now.getTime()) next.setDate(next.getDate() + 1);
   return next.getTime() - now.getTime();
+}
+
+// Shift slot key: 12-hour shifts starting at 09:00 and 21:00
+function getSlotKey(d: Date) {
+  const x = new Date(d.getTime());
+  const h = x.getHours();
+  let slot = 21;
+  if (h < 3) x.setDate(x.getDate() - 1);
+  else if (h < 15) slot = 9;
+  return `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}-${slot}`;
 }
 
 const ONE_DAY = 24 * 60 * 60 * 1000;
@@ -202,8 +212,9 @@ function Dashboard() {
               <TabsList className="h-9">
                 <TabsTrigger value="single" className="text-xs">Single Train</TabsTrigger>
                 <TabsTrigger value="compare" className="text-xs">Compare Trains</TabsTrigger>
-                <TabsTrigger value="utilities" className="text-xs">
-                  <Fan className="size-3.5 mr-1.5" />Utilities
+                <TabsTrigger value="utilities" className="text-xs flex items-center gap-1.5">
+                  <Wrench className="size-3.5" />
+                  Utilities
                 </TabsTrigger>
               </TabsList>
             </Tabs>
@@ -228,22 +239,28 @@ function Dashboard() {
                 if (mode === "single") {
                   query.refetch();
                   siteQuery.refetch();
-                } else {
+                } else if (mode === "compare") {
                   compareQueries.forEach((q) => q.refetch());
+                  siteQuery.refetch();
+                } else {
                   siteQuery.refetch();
                 }
               }}
               disabled={
                 mode === "single"
                   ? query.isFetching || siteQuery.isFetching
-                  : compareQueries.some((q) => q.isFetching)
+                  : mode === "compare"
+                  ? compareQueries.some((q) => q.isFetching) || siteQuery.isFetching
+                  : siteQuery.isFetching
               }
             >
               <RefreshCw
                 className={`size-4 ${
                   (mode === "single"
                     ? query.isFetching || siteQuery.isFetching
-                    : compareQueries.some((q) => q.isFetching))
+                    : mode === "compare"
+                    ? compareQueries.some((q) => q.isFetching) || siteQuery.isFetching
+                    : siteQuery.isFetching)
                     ? "animate-spin"
                     : ""
                 }`}
@@ -284,18 +301,15 @@ function Dashboard() {
             }))}
             siteRows={siteQuery.data?.rows}
             siteColumns={siteQuery.data?.columns}
+            siteLoading={siteQuery.isLoading}
           />
         )}
         {mode === "utilities" && (
           <UtilitiesView
-            queries={compareQueries.map((q, i) => ({
-              train: trainNames[i],
-              data: q.data,
-              isLoading: q.isLoading,
-              error: q.error as Error | null,
-            }))}
             siteRows={siteQuery.data?.rows}
             siteColumns={siteQuery.data?.columns}
+            siteLoading={siteQuery.isLoading}
+            siteError={siteQuery.error as Error | null}
           />
         )}
 
@@ -393,14 +407,7 @@ function DashboardBody({
   // -- Turbine mode filter (Simple / Combined) from the site sheet's
   //    "Train X Mode" column; applied to train + site rows by shift slot.
   const [turbineMode, setTurbineMode] = useState<"all" | "simple" | "combined">("all");
-  const slotKey = (d: Date) => {
-    const x = new Date(d.getTime());
-    const h = x.getHours();
-    let slot = 21;
-    if (h < 3) x.setDate(x.getDate() - 1);
-    else if (h < 15) slot = 9;
-    return `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}-${slot}`;
-  };
+  const slotKey = getSlotKey;
   const modeSlots = useMemo(() => {
     if (turbineMode === "all" || !siteRows?.length) return null;
     const letter = train.replace(/^Train\s*/i, "").trim();
@@ -440,7 +447,11 @@ function DashboardBody({
   // the train sheet — there is no separate "Site" section.
   const siteSensors = useMemo(() => [...siteForTrain, ...siteGeneral], [siteForTrain, siteGeneral]);
   const allSensors = useMemo(() => [...columns, ...siteSensors], [columns, siteSensors]);
-  const groups = useMemo(() => groupColumns(allSensors), [allSensors]);
+  const groups = useMemo(() => {
+    const g = groupColumns(allSensors);
+    delete g["Utilities"];
+    return g;
+  }, [allSensors]);
   const groupNames = Object.keys(groups);
   const mergedData = useMemo(() => {
     if (!filteredSite.length) return filteredData;
@@ -1589,9 +1600,10 @@ function KpiCard({
   previous,
   column,
   where,
-}: Kpi & { previous?: Row }) {
-  const prev = column ? getNum(previous, column) : null;
-  const delta = value !== null && prev !== null ? value - prev : null;
+  hideDelta = false,
+}: Kpi & { previous?: Row; hideDelta?: boolean }) {
+  const prev = !hideDelta && column ? getNum(previous, column) : null;
+  const delta = !hideDelta && value !== null && prev !== null ? value - prev : null;
   const toneClass =
     tone === "danger"
       ? "border-destructive/50 bg-destructive/5"
@@ -2182,11 +2194,13 @@ function CompareView({
   queries,
   siteRows,
   siteColumns,
+  siteLoading,
 }: {
   trainNames: string[];
   queries: CompareQuery[];
   siteRows?: Row[];
   siteColumns?: string[];
+  siteLoading?: boolean;
 }) {
   const loaded = queries.filter((q) => q.data);
   const anyLoading = queries.some((q) => q.isLoading);
@@ -2204,6 +2218,29 @@ function CompareView({
     if (toMs != null && t > toMs) return false;
     return true;
   };
+
+  // Turbine mode filter (Simple / Combined) from the site sheet's
+  // "Train X Mode" columns; applied to each train's rows by shift slot.
+  const [turbineMode, setTurbineMode] = useState<"all" | "simple" | "combined">("all");
+  const modeSlotsByTrain = useMemo(() => {
+    if (turbineMode === "all" || !siteRows?.length) return null;
+    const cols = siteColumns ?? Object.keys(siteRows[0]);
+    const out: Record<string, Set<string>> = {};
+    for (const t of trainNames) {
+      const letter = t.replace(/^Train\s*/i, "").trim();
+      const re = new RegExp(`^\\s*(train|trian)\\s+${letter}\\s+mode\\s*$`, "i");
+      const col = cols.find((c) => re.test(c));
+      const set = new Set<string>();
+      if (col) {
+        for (const r of siteRows) {
+          const v = String(r[col] ?? "").trim().toLowerCase();
+          if (r.__timestamp && v === turbineMode) set.add(getSlotKey(r.__timestamp));
+        }
+      }
+      out[t] = set;
+    }
+    return out;
+  }, [turbineMode, siteRows, siteColumns, trainNames]);
 
   // Site Conditions sensors, canonicalised so the same tag can be compared
   // across trains: "(PDI-1314)" / "(PDI-2314)" → "(PDI-x314)".
@@ -2241,8 +2278,12 @@ function CompareView({
     for (const q of loaded) {
       const rows: Row[] = [];
       const cols = q.data!.columns;
+      const trainSlots = modeSlotsByTrain ? modeSlotsByTrain[q.train] : null;
+      const inTrainMode = (r: Row) =>
+        !trainSlots || (!!r.__timestamp && trainSlots.has(getSlotKey(r.__timestamp)));
+
       for (const src of q.data!.rows) {
-        if (!inRange(src)) continue;
+        if (!inRange(src) || !inTrainMode(src)) continue;
         const r: Row = { __timestamp: src.__timestamp, __readingDate: readingDate(src) };
         for (const c of cols) {
           const v = src[c];
@@ -2253,7 +2294,7 @@ function CompareView({
       const m = site?.canonMap[q.train];
       if (m) {
         for (const sr of site!.rows) {
-          if (!inRange(sr)) continue;
+          if (!inRange(sr) || !inTrainMode(sr)) continue;
           const r: Row = { __timestamp: sr.__timestamp, __readingDate: readingDate(sr) };
           for (const [canon, actual] of Object.entries(m)) {
             const v = sr[actual];
@@ -2266,7 +2307,7 @@ function CompareView({
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded, site, fromMs, toMs]);
+  }, [loaded, site, fromMs, toMs, modeSlotsByTrain]);
 
   // Union of canonical sensor columns across all loaded trains
   const allColumns = useMemo(() => {
@@ -2282,7 +2323,9 @@ function CompareView({
       ...(site?.trainSensorNames ?? []),
       ...(site?.generalSensorNames ?? []),
     ];
-    return groupColumns([...allColumns, ...siteNames]);
+    const g = groupColumns([...allColumns, ...siteNames]);
+    delete g["Utilities"];
+    return g;
   }, [allColumns, site]);
 
   const groupNames = Object.keys(groups);
@@ -2446,6 +2489,23 @@ function CompareView({
             >
               Clear
             </Button>
+            <div className="flex items-center gap-1 rounded-md border border-border p-1">
+              <span className="text-xs text-muted-foreground px-1">Turbine mode</span>
+              <Button
+                size="sm"
+                className={`h-7 text-xs font-semibold ${turbineMode === "simple" ? "bg-accent text-accent-foreground hover:bg-accent/90 ring-2 ring-accent/50" : "bg-accent/15 text-accent hover:bg-accent/25"}`}
+                onClick={() => setTurbineMode(turbineMode === "simple" ? "all" : "simple")}
+              >
+                Simple
+              </Button>
+              <Button
+                size="sm"
+                className={`h-7 text-xs font-semibold ${turbineMode === "combined" ? "bg-primary text-primary-foreground hover:bg-primary/90 ring-2 ring-primary/50" : "bg-primary/15 text-primary hover:bg-primary/25"}`}
+                onClick={() => setTurbineMode(turbineMode === "combined" ? "all" : "combined")}
+              >
+                Combined
+              </Button>
+            </div>
             <div className="ml-auto flex items-center gap-2">
               <Select value={activeGroup} onValueChange={setActiveGroup}>
                 <SelectTrigger className="w-[220px] h-8 text-xs">
@@ -2463,6 +2523,13 @@ function CompareView({
           </div>
         </CardContent>
       </Card>
+
+      {/* Site Conditions load state hint */}
+      {siteLoading && (
+        <p className="text-xs text-muted-foreground font-mono">
+          Loading Site Conditions sheet…
+        </p>
+      )}
 
       <div className="grid lg:grid-cols-[1fr_280px] gap-4">
         {/* Chart */}
@@ -2544,6 +2611,468 @@ function CompareView({
               </Card>
             ))}
           </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ===================== Utilities View =====================
+
+function UtilitiesView({
+  siteRows = [],
+  siteColumns = [],
+  siteLoading,
+  siteError,
+}: {
+  siteRows?: Row[];
+  siteColumns?: string[];
+  siteLoading?: boolean;
+  siteError?: Error | null;
+}) {
+  // Time frame
+  const [from, setFrom] = useState<string>("");
+  const [to, setTo] = useState<string>("");
+  const fromMs = from ? new Date(from + "T00:00:00").getTime() : null;
+  const toMs = to ? new Date(to + "T23:59:59").getTime() : null;
+  const inRange = (r: Row) => {
+    const t = r.__timestamp?.getTime();
+    if (t == null) return false;
+    if (fromMs != null && t < fromMs) return false;
+    if (toMs != null && t > toMs) return false;
+    return true;
+  };
+
+  const filteredData = useMemo(() => {
+    return siteRows.filter((r) => (fromMs || toMs ? inRange(r) : true));
+  }, [siteRows, fromMs, toMs]);
+
+  // Extract all Utilities sensors from siteColumns
+  const utilitySensors = useMemo(() => {
+    if (!siteColumns.length) return [];
+    return siteColumns.filter((c) => {
+      if (META_COLUMNS.has(c) || META_COLUMNS.has(c.trim())) return false;
+      if (c === "Timestamp" || /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(c.trim())) return false;
+      if (/^(train in service|train mode|trian mode|unnamed|_\d)/i.test(c.trim())) return false;
+      return /(water|instrument p|utility p|compressor [abc] discharge t|dryer|diesel|flare|filter in service)/i.test(c);
+    });
+  }, [siteColumns]);
+
+  const UTILITY_PAGES = useMemo(() => {
+    const isAir = (c: string) => /(instrument p|utility p|compressor [abc]|dryer)/i.test(c);
+    const isWater = (c: string) => /water/i.test(c);
+    const isDiesel = (c: string) => /diesel/i.test(c);
+    const isFlare = (c: string) => /flare/i.test(c);
+
+    const airSensors = utilitySensors.filter(isAir);
+    const waterSensors = utilitySensors.filter(isWater);
+    const dieselSensors = utilitySensors.filter(isDiesel);
+    const flareSensors = utilitySensors.filter(isFlare);
+
+    const pages = [
+      { key: "All Utilities", label: "All Utilities", sensors: utilitySensors },
+      { key: "Air System", label: "Compressed & Instrument Air", sensors: airSensors },
+      { key: "Water System", label: "Water System", sensors: waterSensors },
+      { key: "Diesel System", label: "Diesel System", sensors: dieselSensors },
+      { key: "Flare System", label: "Flare System", sensors: flareSensors },
+    ];
+    return pages.filter((p) => p.sensors.length > 0);
+  }, [utilitySensors]);
+
+  const [activePage, setActivePage] = useState<string>("All Utilities");
+  const currentPage = UTILITY_PAGES.find((p) => p.key === activePage) ?? UTILITY_PAGES[0];
+  const currentSensors = currentPage?.sensors ?? utilitySensors;
+
+  const [chartSensors, setChartSensors] = useState<string[]>([]);
+  const [rawAll, setRawAll] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const rawColumns = useMemo(() => {
+    const base = rawAll ? currentSensors : chartSensors.length ? chartSensors : currentSensors;
+    return base;
+  }, [rawAll, currentSensors, chartSensors]);
+
+  const rawData = useMemo(() => {
+    return filteredData.filter((r) => r.__timestamp);
+  }, [filteredData]);
+
+  // Data for charts: neglect Air Dryer dew point readings when the dryer status is OFF
+  const chartData = useMemo(() => {
+    const dryerPairs: { dewCol: string; statusCol: string }[] = [];
+    for (const c of utilitySensors) {
+      const m = c.match(/air dryer\s*([a-z0-9]+)\s*dew\s*point/i);
+      if (m) {
+        const letter = m[1];
+        const statusCol = utilitySensors.find((x) =>
+          new RegExp(`air dryer\\s*${letter}\\s*status`, "i").test(x)
+        );
+        if (statusCol) {
+          dryerPairs.push({ dewCol: c, statusCol });
+        }
+      }
+    }
+
+    if (dryerPairs.length === 0) return filteredData;
+
+    return filteredData.map((r) => {
+      let copy: Row | null = null;
+      for (const pair of dryerPairs) {
+        const st = String(r[pair.statusCol] ?? "").trim().toUpperCase();
+        if (st === "OFF") {
+          if (!copy) copy = { ...r };
+          copy[pair.dewCol] = null;
+        }
+      }
+      return copy ?? r;
+    });
+  }, [filteredData, utilitySensors]);
+
+  // Latest row
+  const latest = filteredData[filteredData.length - 1];
+
+  // Equipment status indicators
+  const equipmentStatus = useMemo(() => {
+    if (!latest) return [];
+    const statusCols = utilitySensors.filter((c) => /status/i.test(c));
+    return statusCols.map((c) => {
+      const v = String(latest[c] ?? "").trim();
+      const isRunning = /^(on|run|running|in service|active|1)$/i.test(v);
+      return {
+        label: c.replace(/\s*status\s*/i, "").trim(),
+        rawStatus: v || "—",
+        isRunning,
+      };
+    });
+  }, [latest, utilitySensors]);
+
+  // KPI cards
+  const kpiItems = useMemo(() => {
+    if (!filteredData.length) return [];
+    const items: Kpi[] = [];
+
+    const getSeries = (col: string) =>
+      filteredData
+        .filter((r) => typeof r[col] === "number" && Number.isFinite(r[col] as number) && r.__timestamp)
+        .map((r) => ({ t: (r.__timestamp as Date).getTime(), v: r[col] as number, row: r }))
+        .sort((a, b) => a.t - b.t);
+
+    const countExcursions = (col: string, bad: (v: number) => boolean) => {
+      let n = 0;
+      let inBad = false;
+      for (const p of getSeries(col)) {
+        if (bad(p.v)) {
+          if (!inBad) n++;
+          inBad = true;
+        } else {
+          inBad = false;
+        }
+      }
+      return n;
+    };
+
+    const instAir = utilitySensors.find((c) => /instrument p/i.test(c));
+    if (instAir && latest) {
+      const v = typeof latest[instAir] === "number" ? (latest[instAir] as number) : null;
+      items.push({
+        label: "Instrument Air Pressure",
+        value: v,
+        column: instAir,
+        unit: "bar",
+        groups: ["Utilities"],
+        tone: v !== null && v < 6 ? "danger" : "default",
+      });
+      const lowAirEvents = countExcursions(instAir, (val) => val < 6);
+      items.push({
+        label: "Instrument Air Low-P Events (< 6 bar)",
+        value: lowAirEvents,
+        column: instAir,
+        unit: "times",
+        groups: ["Utilities"],
+        tone: lowAirEvents > 0 ? "warning" : "default",
+      });
+    }
+
+    const utilityP = utilitySensors.find((c) => /utility p/i.test(c));
+    if (utilityP && latest) {
+      const v = typeof latest[utilityP] === "number" ? (latest[utilityP] as number) : null;
+      items.push({
+        label: "Utility Air Pressure",
+        value: v,
+        column: utilityP,
+        unit: "bar",
+        groups: ["Utilities"],
+      });
+    }
+
+    const waterLvl = utilitySensors.find((c) => /water level/i.test(c));
+    if (waterLvl && latest) {
+      const v = typeof latest[waterLvl] === "number" ? (latest[waterLvl] as number) : null;
+      items.push({
+        label: "Water Tank Level",
+        value: v,
+        column: waterLvl,
+        unit: "mm",
+        groups: ["Utilities"],
+        tone: v !== null && v < 1000 ? "warning" : "default",
+      });
+    }
+
+    for (const L of ["A", "B", "C"]) {
+      const col = utilitySensors.find((c) => new RegExp(`compressor ${L} discharge t`, "i").test(c));
+      if (!col) continue;
+      const s = getSeries(col).map((p) => p.v);
+      const mx = s.length ? Math.max(...s) : null;
+      if (mx !== null) {
+        items.push({
+          label: `Air Comp ${L} Max Discharge T`,
+          value: mx,
+          column: col,
+          unit: "°C",
+          groups: ["Utilities"],
+          tone: mx > 95 ? "warning" : "default",
+        });
+      }
+      const exc = countExcursions(col, (val) => val > 95);
+      if (exc > 0) {
+        items.push({
+          label: `Air Comp ${L} High-T Events (> 95°C)`,
+          value: exc,
+          column: col,
+          unit: "times",
+          groups: ["Utilities"],
+          tone: "danger",
+        });
+      }
+    }
+
+    for (const L of ["A", "B"]) {
+      const dew = utilitySensors.find((c) => new RegExp(`air dryer ${L} dew point`, "i").test(c));
+      const st = utilitySensors.find((c) => new RegExp(`air dryer ${L} status`, "i").test(c));
+      if (!dew) continue;
+      const vals = getSeries(dew)
+        .filter((p) => !st || String(p.row[st] ?? "").trim().toUpperCase() === "ON")
+        .map((p) => p.v);
+      if (vals.length) {
+        items.push({
+          label: `Air Dryer ${L} Avg Dew Point`,
+          value: vals.reduce((a, b) => a + b, 0) / vals.length,
+          column: dew,
+          unit: "°C",
+          groups: ["Utilities"],
+        });
+      }
+    }
+
+    const dieselLvl = utilitySensors.find((c) => /diesel.*level/i.test(c));
+    if (dieselLvl && latest) {
+      const v = typeof latest[dieselLvl] === "number" ? (latest[dieselLvl] as number) : null;
+      items.push({
+        label: "Diesel Tank Level",
+        value: v,
+        column: dieselLvl,
+        unit: "mm",
+        groups: ["Utilities"],
+        tone: v !== null && v < 385 ? "warning" : "default",
+      });
+    }
+
+    const flareP = utilitySensors.find((c) => /flare pilot/i.test(c));
+    if (flareP && latest) {
+      const v = typeof latest[flareP] === "number" ? (latest[flareP] as number) : null;
+      items.push({
+        label: "Flare Pilot Pressure",
+        value: v,
+        column: flareP,
+        unit: "bar",
+        groups: ["Utilities"],
+      });
+    }
+
+    return items;
+  }, [filteredData, utilitySensors, latest]);
+
+  if (siteLoading && !siteRows.length) return <Loading />;
+
+  return (
+    <div className="space-y-6">
+      {siteError && (
+        <Card className="border-warning/40">
+          <CardContent className="py-3 text-xs font-mono text-warning">
+            Site Conditions sheet failed to load: {siteError.message}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Toolbar / Header */}
+      <Card>
+        <CardContent className="py-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground uppercase tracking-wider w-20">
+                Time frame
+              </span>
+              <Input
+                type="date"
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+                className="h-8 w-[150px] text-xs"
+              />
+              <span className="text-xs text-muted-foreground">→</span>
+              <Input
+                type="date"
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+                className="h-8 w-[150px] text-xs"
+              />
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 text-xs"
+                onClick={() => {
+                  setFrom("");
+                  setTo("");
+                }}
+                disabled={!from && !to}
+              >
+                Reset
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="font-mono">
+                <Wrench className="size-3 mr-1 text-primary" />
+                {utilitySensors.length} utility sensors
+              </Badge>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Equipment status strip */}
+      {equipmentStatus.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground uppercase tracking-wider mr-1">
+            Equipment Status:
+          </span>
+          {equipmentStatus.map((eq, i) => (
+            <Badge
+              key={i}
+              variant="outline"
+              className={`text-xs px-2.5 py-1 font-mono transition-colors ${
+                eq.isRunning
+                  ? "bg-primary/15 text-primary border-primary/30"
+                  : "bg-muted text-muted-foreground border-border"
+              }`}
+            >
+              <span
+                className={`size-1.5 rounded-full mr-1.5 inline-block ${
+                  eq.isRunning ? "bg-primary" : "bg-muted-foreground/40"
+                }`}
+              />
+              {eq.label}: {eq.rawStatus}
+            </Badge>
+          ))}
+        </div>
+      )}
+
+      {/* KPI Cards */}
+      {kpiItems.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          {kpiItems.map((k, i) => (
+            <KpiCard key={`${k.label}-${i}`} {...k} hideDelta />
+          ))}
+        </div>
+      )}
+
+      {/* Subsystem Pages and Charts Workspace */}
+      <div
+        data-utilities-workspace
+        className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)] md:h-[max(600px,calc(100dvh-18rem))]"
+      >
+        <Card data-pages-panel className="flex flex-col min-h-0 md:h-full overflow-hidden">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <Wrench className="size-3.5 text-primary" />
+              Subsystems
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-2 min-h-0 md:flex-1">
+            <ScrollArea className="h-[min(70vh,600px)] md:h-full">
+              <nav className="flex flex-col gap-1">
+                {UTILITY_PAGES.map((p) => {
+                  const active = p.key === activePage;
+                  return (
+                    <button
+                      key={p.key}
+                      onClick={() => setActivePage(p.key)}
+                      className={`text-left text-sm px-3 py-2 rounded-md transition-colors flex items-center justify-between gap-2 ${
+                        active
+                          ? "bg-primary/15 text-primary ring-1 ring-primary/30 font-medium"
+                          : "hover:bg-muted/60 text-foreground/80"
+                      }`}
+                    >
+                      <span className="truncate">{p.label}</span>
+                      <span className="text-xs opacity-60 font-mono">
+                        {p.sensors.length}
+                      </span>
+                    </button>
+                  );
+                })}
+              </nav>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+        <div className="min-w-0 min-h-0 md:h-full">
+          <SectionView
+            key={activePage}
+            sensors={currentSensors}
+            everySensor={utilitySensors}
+            data={chartData}
+            sectionName={currentPage?.label ?? activePage}
+            onSelectionChange={setChartSensors}
+          />
+        </div>
+      </div>
+
+      {/* Raw Readings table */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <CardTitle className="text-base">Raw Readings</CardTitle>
+              <p className="text-xs text-muted-foreground font-mono mt-1">
+                {currentPage?.label ?? activePage} · {rawColumns.length} sensor
+                {rawColumns.length !== 1 && "s"} · {rawData.length} reading
+                {rawData.length !== 1 && "s"}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant={rawAll ? "outline" : "default"}
+                className="h-8 text-xs"
+                onClick={() => setRawAll(false)}
+              >
+                Charted sensors
+              </Button>
+              <Button
+                size="sm"
+                variant={rawAll ? "default" : "outline"}
+                className="h-8 text-xs"
+                onClick={() => setRawAll(true)}
+              >
+                All in subsystem
+              </Button>
+              <Input
+                placeholder="Filter columns…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="max-w-xs h-8"
+              />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <RawTable data={rawData} columns={rawColumns} search={search} />
         </CardContent>
       </Card>
     </div>
